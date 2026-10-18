@@ -1,0 +1,32 @@
+[
+  {
+    "source": "/vendor/firmware_mnt/image/peach/amss20.bin",
+    "file": "amss20.bin",
+    "bytes": 6828096,
+    "sha256": "cd9a728d2c42a9681717c9a06b7ae70dbf21389112dafa7e35840b354fc1ef72"
+  },
+  {
+    "source": "/odm/etc/wifi/peach/bdwlan.elf",
+    "file": "bdwlan.elf",
+    "bytes": 125328,
+    "sha256": "95952e373b6a5a4dab581041b4fd8e18049819b28e340e2616016b0c65d8dea7"
+  },
+  {
+    "source": "/odm/etc/wifi/peach/regdb.bin",
+    "file": "regdb.bin",
+    "bytes": 24278,
+    "sha256": "353df6eb96be7f4c8406f313020d2b52c55905908eacc056b880202801f4a429"
+  },
+  {
+    "source": "/vendor/firmware_mnt/image/tmel_peach_20.elf",
+    "file": "tmel_peach_20.elf",
+    "bytes": 55204,
+    "sha256": "4814d33de80088dc3d79e8a08a3afabf193d33b0666a9d062fc4722546267774"
+  },
+  {
+    "source": "/vendor/firmware_mnt/image/peach/aux_ucode20.elf",
+    "file": "aux_ucode20.elf",
+    "bytes": 61440,
+    "sha256": "d381900e5c09dc57dcc1b235f91e890cca4ae9e86e94f17ac3e5429100241d71"
+  }
+]

@@ -1,0 +1,112 @@
+From c7626aaf3a19af05567de737a61120a6874440a7 Mon Sep 17 00:00:00 2001
+From: bluseliu50 <265648257+bluseliu50@users.noreply.github.com>
+Date: Sun, 27 Sep 2026 15:51:21 +0800
+Subject: [PATCH] piano: bt: hci_qca: move the Brahma UART to 8 Mbaud through
+ PERI
+
+PERI generic command 0x02 switches the shared UART rate (flow off,
+command, 20 ms, host switch, flow on; the reply arrives at the new
+rate).  With the transport at 8 Mbaud btqca no longer needs to pace the
+rampatch, which now loads in well under a second instead of ~23 s; the
+whole Brahma setup drops from ~30 s to ~6 s.  piano_peri bit 64.
+---
+ drivers/bluetooth/btqca.c   |  7 ++++++-
+ drivers/bluetooth/btqca.h   |  2 ++
+ drivers/bluetooth/hci_qca.c | 32 +++++++++++++++++++++++++++++++-
+ 3 files changed, 39 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/bluetooth/btqca.c b/drivers/bluetooth/btqca.c
+index 0010b98db5ddf..df337fe8186b8 100644
+--- a/drivers/bluetooth/btqca.c
++++ b/drivers/bluetooth/btqca.c
+@@ -13,6 +13,10 @@
+ 
+ #include "btqca.h"
+ 
++/* set by hci_qca once the Peach PERI has moved the UART to its operating rate */
++bool qca_peach_fast_uart;
++EXPORT_SYMBOL_GPL(qca_peach_fast_uart);
++
+ int qca_read_soc_version(struct hci_dev *hdev, struct qca_btsoc_version *ver,
+ 			 enum qca_btsoc_type soc_type)
+ {
+@@ -804,7 +808,8 @@ int qca_uart_setup(struct hci_dev *hdev, uint8_t baudrate,
+ 		config.current_baud_download =
+ 			((soc_id == 0x40210100 && tuple_rom == 0x0100) ||
+ 			 (soc_id == 0x40210200 && tuple_rom == 0x0200)) &&
+-			(product_id == 0x1e || product_id == 0x21);
++			(product_id == 0x1e || product_id == 0x21) &&
++			!qca_peach_fast_uart;
+ 	}
+ 
+ 	/* Firmware files to download are based on ROM version.
+diff --git a/drivers/bluetooth/btqca.h b/drivers/bluetooth/btqca.h
+index 075ccfbf7deb5..e1fbe99aadd42 100644
+--- a/drivers/bluetooth/btqca.h
++++ b/drivers/bluetooth/btqca.h
+@@ -167,6 +167,8 @@ enum qca_btsoc_type {
+ #if IS_ENABLED(CONFIG_BT_QCA)
+ 
+ int qca_set_bdaddr_rome(struct hci_dev *hdev, const bdaddr_t *bdaddr);
++extern bool qca_peach_fast_uart;
++
+ int qca_uart_setup(struct hci_dev *hdev, uint8_t baudrate,
+ 		   enum qca_btsoc_type soc_type, struct qca_btsoc_version ver,
+ 		   const char *firmware_name, const char *rampatch_name);
+diff --git a/drivers/bluetooth/hci_qca.c b/drivers/bluetooth/hci_qca.c
+index b8e177fc638ff..0844e54b66a78 100644
+--- a/drivers/bluetooth/hci_qca.c
++++ b/drivers/bluetooth/hci_qca.c
+@@ -1294,6 +1294,10 @@ static unsigned int piano_peri;
+ module_param(piano_peri, uint, 0644);
+ MODULE_PARM_DESC(piano_peri, "piano bring-up: PERI steps bitmask (1 ver, 2 arbitrate, 4 activate BT, 8 patch+nvm+reset)");
+ 
++static unsigned int piano_peri_baud = 8000000;
++module_param(piano_peri_baud, uint, 0644);
++MODULE_PARM_DESC(piano_peri_baud, "piano bring-up: PERI operating UART rate (piano_peri bit 64)");
++
+ static DECLARE_COMPLETION(piano_peri_rx);
+ static u8 piano_peri_last[64];
+ static int piano_peri_last_len;
+@@ -1373,7 +1377,8 @@ static int piano_peri_tlv(struct hci_uart *hu, const char *fwname)
+ 		serdev_device_write(hu->serdev, pkt, 8 + n, MAX_SCHEDULE_TIMEOUT);
+ 		/* patch TLVs ack only the last segment, NVM TLVs every one */
+ 		if (wait_for_completion_timeout(&piano_peri_rx,
+-				msecs_to_jiffies(off + n >= fw->size ? 1000 : 30))) {
++				msecs_to_jiffies(off + n >= fw->size ? 1000 :
++						   qca_peach_fast_uart ? 2 : 30))) {
+ 			acks++;
+ 			if (acks == 1 || off + n >= fw->size ||
+ 			    (piano_peri_last_len > 9 && piano_peri_last[9]))
+@@ -2191,6 +2196,31 @@ static int qca_setup(struct hci_uart *hu)
+ 			goto out;
+ 	}
+ 
++	qca_peach_fast_uart = false;
++	if (soc_type == QCA_WCN7861 && hu->serdev && (piano_peri & 64)) {
++		/*
++		 * PERI generic 0x02: switch the UART rate.  Flow off, command,
++		 * 20 ms, host switch, flow on; the reply comes at the new rate.
++		 */
++		u8 baud[] = { 0x31, 0x00, 0xf1, 0xff, 0x02, 0x02,
++			      qca_get_baudrate_value(piano_peri_baud) };
++
++		reinit_completion(&piano_peri_rx);
++		bt_dev_info(hdev, "PERI tx set-baud %u: %*ph", piano_peri_baud,
++			    (int)sizeof(baud), baud);
++		hci_uart_set_flow_control(hu, true);
++		serdev_device_write(hu->serdev, baud, sizeof(baud), MAX_SCHEDULE_TIMEOUT);
++		serdev_device_wait_until_sent(hu->serdev, 0);
++		msleep(20);
++		host_set_baudrate(hu, piano_peri_baud);
++		hci_uart_set_flow_control(hu, false);
++		if (wait_for_completion_timeout(&piano_peri_rx, msecs_to_jiffies(1000))) {
++			qca_peach_fast_uart = true;
++			bt_dev_info(hdev, "PERI now at %u baud", piano_peri_baud);
++		} else {
++			bt_dev_err(hdev, "PERI set-baud: no reply at %u", piano_peri_baud);
++		}
++	}
+ 	if (soc_type == QCA_WCN7861 && hu->serdev && (piano_peri & 0xb)) {
+ 		static const u8 act[] = { 0x31, 0x00, 0xf1, 0xff, 0x03, 0x00, 0x01, 0x01 };
+ 		static const u8 pver[] = { 0x31, 0x00, 0xf0, 0xff, 0x02, 0x05, 0x00 };

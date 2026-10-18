@@ -1,0 +1,187 @@
+From e1e9bceee821814625602b968afd0866fd1ef8a6 Mon Sep 17 00:00:00 2001
+From: bluseliu50 <265648257+bluseliu50@users.noreply.github.com>
+Date: Sun, 27 Sep 2026 16:27:40 +0800
+Subject: [PATCH] build: WLAN + Bluetooth milestone (milestone-btwlan-1) (#17)
+
+Build orchestration for the WLAN/Bluetooth milestone.
+
+- build-test-image.sh stages the Peach WLAN firmware under the names
+  ath12k expects (ath12k/PEACH/hw2.0, board data bd_p81.elf,
+  regdb_xiaomi.bin), the Brahma BT firmware and the PERI patch/NVM
+  (brhperifw20.tlv, brhperinv20.bin), and builds the piano-bt-scan helper
+- submodules: linux-piano c7626aaf3 (piano-7.2.6, #12), debian-piano
+  a30c83f (main, #16)
+
+Tested on the device (image kernel 7.2.6-00046-g223d75c045cc): WLAN 2.4 +
+5 GHz scan; Bluetooth up at 8 Mbaud and stable. The tested pre-merge
+commits carry the milestone-btwlan-1 tags.
+---
+ debian-piano                |  2 +-
+ linux-piano                 |  2 +-
+ scripts/build-test-image.sh | 98 ++++++++++++++++++++++++++++++-------
+ 3 files changed, 83 insertions(+), 19 deletions(-)
+
+diff --git a/debian-piano b/debian-piano
+index 4d460e7..a30c83f 160000
+--- a/debian-piano
++++ b/debian-piano
+@@ -1 +1 @@
+-Subproject commit 4d460e7185dc61d8a8d052ff2c84607142117964
++Subproject commit a30c83f62ec91165290308261a8be8ecc704a1b9
+diff --git a/linux-piano b/linux-piano
+index c05130a..c7626aa 160000
+--- a/linux-piano
++++ b/linux-piano
+@@ -1 +1 @@
+-Subproject commit c05130acbf30940a4498d5c447a579214f799079
++Subproject commit c7626aaf3a19af05567de737a61120a6874440a7
+diff --git a/scripts/build-test-image.sh b/scripts/build-test-image.sh
+index eaf9753..31fddc1 100755
+--- a/scripts/build-test-image.sh
++++ b/scripts/build-test-image.sh
+@@ -78,8 +78,8 @@ check_repo() { # check_repo DIR BRANCH
+     [ -z "$(git -C "$1" status --porcelain)" ] \
+         || die "$(basename "$1") has uncommitted changes — commit or stash first"
+ }
+-check_repo "$KERNEL" piano/test-bringup
+-check_repo "$DEBIAN" main
++check_repo "$KERNEL" piano/wlanbt
++check_repo "$DEBIAN" bp/wlanbt
+ 
+ BUSYBOX="$TOOLS/busybox"
+ DROPBEAR_TREE="$TOOLS/dropbear/tree"
+@@ -105,6 +105,7 @@ find "$KERNEL_OUT" \( -name '*.mod.c' -o -name '*.ko' \) -delete
+ # --- critical-option gate (the 09-22 lesson, now enforced) ---------------------
+ absent=()
+ for pair in CONFIG_CMDLINE_FORCE=y CONFIG_DRM_SIMPLEDRM=y \
++            CONFIG_PCIE_QCOM=y CONFIG_PHY_QCOM_QMP_PCIE=m \
+             CONFIG_FRAMEBUFFER_CONSOLE=y CONFIG_FONT_TER16x32=y \
+             CONFIG_SM_TCSRCC_8750=y CONFIG_PSTORE_RAM=y \
+             CONFIG_PINCTRL_SM8750=m CONFIG_QCOM_GPI_DMA=m \
+@@ -126,21 +127,41 @@ KVER=$(sed -n 's/^#define UTS_RELEASE "\(.*\)"$/\1/p' \
+ [ -n "$KVER" ] || die "cannot determine kernel release"
+ case "$KVER" in *dirty*) die "kernel release $KVER is dirty" ;; esac
+ 
+-# --- touch module closure; depmod in build-initramfs.sh orders it ------------
+-MODULES=()
+-for rel in \
+-    drivers/pinctrl/qcom/pinctrl-sm8750.ko \
+-    drivers/dma/qcom/gpi.ko \
+-    drivers/spi/spi-geni-qcom.ko \
+-    drivers/input/touchscreen/nt36532e/nt36532e_ts.ko \
+-    drivers/input/misc/uinput.ko; do
+-    path="$KERNEL_OUT/$rel"
+-    [ -s "$path" ] || die "required module missing: $path"
+-    [ "$(modinfo -F vermagic "$path")" = "$KVER SMP preempt mod_unload aarch64" ] \
+-        || die "stale vermagic in $path"
+-    MODULES+=("$path")
++# --- module closure (touch + WLAN/BT ladder), resolved via depmod -------------
++# modules_install + modprobe --show-depends walks the real dependency graph,
++# so no hand-maintained .ko list can go stale (the 09-21 lesson: a missing
++# transitive dep silently killed pcie0).  pcie-qcom itself is a bool option
++# in this kernel (built-in): it stays inert until the initramfs WLAN phase
++# loads phy-qcom-qmp-pcie (the root-port PHY provider).  Socket/alias-bound
++# modules are seeded explicitly: qrtr + qrtr_mhi carry ath12k's QMI and are
++# never pulled in by symbol dependencies.
++MOD_INSTALL="$KERNEL_OUT/mod-closure"
++CLOSURE="$KERNEL_OUT/mod-closure.txt"
++rm -rf "$MOD_INSTALL"
++make -C "$KERNEL" ARCH=arm64 LLVM=1 O="$KERNEL_OUT" -j"$JOBS" modules_install \
++     INSTALL_MOD_PATH="$MOD_INSTALL" INSTALL_MOD_STRIP=1 >/dev/null \
++  || die "modules_install failed"
++
++: > "$CLOSURE"
++for mod in pinctrl_sm8750 nt36532e_ts uinput \
++           gpio_shared_proxy pwrseq_qcom_wcn pci_pwrctrl_pwrseq \
++           phy_qcom_qmp_pcie qrtr qrtr_mhi ath12k_wifi7 hci_uart; do
++    modprobe -S "$KVER" -d "$MOD_INSTALL" --show-depends "$mod" \
++        >> "$CLOSURE" 2>/dev/null \
++      || die "cannot resolve module closure for $mod (is it built?)"
+ done
+ 
++MODULES=()
++while read -r ko; do
++    [ -s "$ko" ] || die "closure module missing: $ko"
++    [ "$(modinfo -F vermagic "$ko")" = "$KVER SMP preempt mod_unload aarch64" ] \
++        || die "stale vermagic in $ko"
++    MODULES+=("$ko")
++done < <(awk '$1 == "insmod" {print $2}' "$CLOSURE" | sort -u)
++[ "${#MODULES[@]}" -ge 14 ] \
++    || die "module closure suspiciously small (${#MODULES[@]} modules)"
++echo "build-test-image: module closure = ${#MODULES[@]} modules"
++
+ # --- firmware + helper staging (inside the ignored kernel out dir) ------------
+ rm -rf "$STAGE"
+ mkdir -p "$STAGE/firmware/novatek"
+@@ -148,10 +169,52 @@ for name in novatek_nt36532_piano_fw_csot.bin novatek_nt36532_piano_fw_boe.bin;
+     [ -s "$TOUCH_FIRMWARE_SRC/$name" ] || die "missing touch firmware: $TOUCH_FIRMWARE_SRC/$name"
+     cp -a "$TOUCH_FIRMWARE_SRC/$name" "$STAGE/firmware/novatek/"
+ done
++
++# WLAN/BT combo firmware: ath12k/WCN7850 (amss/m3/board-2/bdwlan) and the
++# qca hmt* HCI firmware/nvm set, verified against their SHA256SUMS manifest.
++WLANBT_FIRMWARE="$WORKSPACE/local/firmware/wifi-bt"
++[ -d "$WLANBT_FIRMWARE/ath12k/WCN7850/hw2.0" ] \
++    || die "missing WLAN firmware: $WLANBT_FIRMWARE/ath12k/WCN7850/hw2.0"
++[ -s "$WLANBT_FIRMWARE/qca/hmtbtfw20.tlv" ] \
++    || die "missing BT firmware: $WLANBT_FIRMWARE/qca/hmtbtfw20.tlv"
++( cd "$WLANBT_FIRMWARE" && sha256sum --check --quiet SHA256SUMS ) \
++    || die "wifi-bt firmware fails its SHA256SUMS manifest"
++cp -a "$WLANBT_FIRMWARE/ath12k" "$STAGE/firmware/"
++# peach (17cb:110e) runs its own WLAN.GNG image set from the stock NON-HLOS
++# partition, under the names the Peach ath12k variant asks for in
++# ath12k/PEACH/hw2.0 (board API 1).  board.bin and regdb.bin follow the
++# stock driver's choice for this board (project P81) when the chip's OTP
++# board_id reads 0xff: bd_p81.elf and regdb_xiaomi.bin, not the generic
++# bdwlan.elf/regdb.bin.  ath12k logs board_id, which confirms the case.
++PEACH_FIRMWARE="$WORKSPACE/local/firmware/non-hlos/image"
++PEACH_DIR="$STAGE/firmware/ath12k/PEACH/hw2.0"
++mkdir -p "$PEACH_DIR"
++for pair in peach/amss20.bin:amss.bin peach/phy_ucode20.elf:m3.bin \
++            peach/aux_ucode20.elf:aux_ucode.bin peach/regdb_xiaomi.bin:regdb.bin \
++            peach/bd_p81.elf:board.bin tmel_peach_20.elf:tmel.bin \
++            peach/qdss_trace_config_v2.cfg:qdss_trace_config.bin; do
++    [ -s "$PEACH_FIRMWARE/${pair%%:*}" ] \
++        || die "missing peach firmware: $PEACH_FIRMWARE/${pair%%:*}"
++    cp "$PEACH_FIRMWARE/${pair%%:*}" "$PEACH_DIR/${pair#*:}"
++done
++cp -a "$WLANBT_FIRMWARE/qca" "$STAGE/firmware/"
++# The piano BT controller is not WCN7850 (TLV product 0x19) but the stock
++# "Brahma" part: product 0x21, ROM 0x200 = brhbtfw20.tlv, whose NVM set is
++# brhbtnv20.{bin,bXX}.  The overlay names them via firmware-name.
++BTFM_FIRMWARE="$WORKSPACE/local/firmware/btfm/image"
++[ -s "$BTFM_FIRMWARE/brhbtfw20.tlv" ] && [ -s "$BTFM_FIRMWARE/brhbtnv20.bin" ] \
++    || die "missing stock BT firmware: $BTFM_FIRMWARE/brhbtfw20.tlv / brhbtnv20.bin"
++# Brahma is multi-subsystem: its PERI core (UART owner) needs its own patch
++# and NVM before the BT rampatch.
++cp -a "$BTFM_FIRMWARE"/brhbtfw20.tlv "$BTFM_FIRMWARE"/brhbtnv20.* \
++      "$BTFM_FIRMWARE"/brhperifw20.tlv "$BTFM_FIRMWARE"/brhperinv20.bin "$STAGE/firmware/qca/"
+ make -C "$KERNEL" ARCH=arm64 LLVM=1 O="$KERNEL_OUT" headers_install \
+     INSTALL_HDR_PATH="$STAGE/uapi"
+ "$DEBIAN/scripts/build-touch-view.sh" --uapi "$STAGE/uapi" \
+     --sysroot "$SYSROOT" --output "$STAGE/piano-touch-view"
++"$DEBIAN/scripts/build-touch-view.sh" --uapi "$STAGE/uapi" \
++    --sysroot "$SYSROOT" --output "$STAGE/piano-bt-scan" \
++    --source "$DEBIAN/initramfs/bt-scan/piano-bt-scan.c"
+ 
+ # --- debug initramfs -----------------------------------------------------------
+ INITRAMFS="$KERNEL_OUT/initramfs.cpio.gz"
+@@ -161,7 +224,8 @@ INITRAMFS_ARGS=(
+     --busybox "$BUSYBOX" --dropbear-tree "$DROPBEAR_TREE"
+     --output "$INITRAMFS" --kernel-version "$KVER"
+     --firmware-dir "$STAGE/firmware" --touch-view "$STAGE/piano-touch-view"
+-    --compress gzip
++    --bt-scan "$STAGE/piano-bt-scan"
++    --iw-tree "$TOOLS/iw/tree" \
+ )
+ for module in "${MODULES[@]}"; do
+     INITRAMFS_ARGS+=(--module "$module")
+@@ -183,7 +247,7 @@ make -C "$KERNEL" ARCH=arm64 LLVM=1 O="$KERNEL_OUT" -j"$JOBS" Image
+ 
+ "$DEBIAN/scripts/build-test-bootimg.sh" \
+     --kernel-dir "$KERNEL_OUT" --output-dir "$OUTPUT_DIR" \
+-    --dtbo-source "$DEBIAN/boot/dtbo-piano-touch-v2.dts"
++    --dtbo-source "$DEBIAN/boot/dtbo-piano-wlanbt.dts"
+ 
+ {
+     echo

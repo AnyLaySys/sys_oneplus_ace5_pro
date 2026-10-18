@@ -1,0 +1,7 @@
+Package: mesa-sm8750
+Version: 26.2.4-1
+Architecture: arm64
+Maintainer: OnePlus Ace 5 Pro Ubuntu
+Depends: libc6 (>= 2.44), libstdc++6, libdrm2 (>= 2.4.134), libegl-mesa0, libglx-mesa0, libgl1-mesa-dri, libgbm1, libwayland-client0, mesa-vulkan-drivers
+Description: Mesa Freedreno and Turnip for the SM8750 Adreno 830
+ Supports the Adreno 830 revision and rendering with a separate display device.

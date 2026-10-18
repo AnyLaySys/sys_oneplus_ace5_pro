@@ -1,0 +1,3 @@
+Android OP60EBL1 /vendor/firmware, extracted 2026-10-18.
+SQE, AQE and GMU match linux-firmware a2dcb924f0897368b0b4f305cbf9808cdda90ce0.
+ZAP is signed for this OnePlus device and differs from the upstream SM8750 image.

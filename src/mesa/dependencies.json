@@ -1,0 +1,398 @@
+[
+  {
+    "package": "libdrm-dev",
+    "version": "2.4.134-3",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libd/libdrm/libdrm-dev_2.4.134-3_arm64.deb",
+    "sha512": "5465d224b0e4632929e6e6cd8496644e1d0c3a09c14d89b6cc13ffdad901c7186e66edcbc9ea07a2a2e7d1f24b50fc273d3027c9a4728c3b8ad8e06aa9d814a1"
+  },
+  {
+    "package": "libdrm2",
+    "version": "2.4.134-3",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libd/libdrm/libdrm2_2.4.134-3_arm64.deb",
+    "sha512": "5526855fe9f6a5a8028fa63bcbc70a68a55907956c92fe45332b83ca900dfc6b571eee28fa39d6f65192a76d7e8a3461c8c976f9530caf213929a85cb4b1543b"
+  },
+  {
+    "package": "libelf-dev",
+    "version": "0.196-1",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/e/elfutils/libelf-dev_0.196-1_arm64.deb",
+    "sha512": "9c0e26aba5e7ea438b01bf5f597d1d87ae4ac3f8262ae8c54a633c210f0d856856db30f2a4c0d76a6474cc281a179fc3f055c2e298acdcc438a3552c4fc90421"
+  },
+  {
+    "package": "libelf1t64",
+    "version": "0.196-1",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/e/elfutils/libelf1t64_0.196-1_arm64.deb",
+    "sha512": "6bd823821ddc1d76e24967ea455fae68f01d127820888b9c8d972012c99bd546ae9d8a2b7e7c50de9d03a585866e31af6a01fe5711110c41a3bc7d2e387c7265"
+  },
+  {
+    "package": "libexpat1",
+    "version": "2.8.3-1ubuntu1",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/e/expat/libexpat1_2.8.3-1ubuntu1_arm64.deb",
+    "sha512": "7f09bf0f51ea4d6e9a6b1f15c08743cc570f0312a279760f0392c1f4b7d96a4056abab79e401d329b97318c638ae479d474bc4983c700495cb9437d8354f9db8"
+  },
+  {
+    "package": "libexpat1-dev",
+    "version": "2.8.3-1ubuntu1",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/e/expat/libexpat1-dev_2.8.3-1ubuntu1_arm64.deb",
+    "sha512": "9a6cd7229cc4b473fd4f05657bc22a60b473302cf72d85130eb84c3509ce46998aa8b863a5d8a8342a1982446021264dacce6b7e11df16454b9dd9ef74984a7d"
+  },
+  {
+    "package": "libffi-dev",
+    "version": "3.8.0-2",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libf/libffi/libffi-dev_3.8.0-2_arm64.deb",
+    "sha512": "85f77af968cb27ee6a6a9b2fc5c8eaaf81f9bcfd0cf9718928301846e199f933ed72548ea8b87aa073c72b53f25afd3ee15da1f04446bc472841e0c0f218bca3"
+  },
+  {
+    "package": "libffi8",
+    "version": "3.8.0-2",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libf/libffi/libffi8_3.8.0-2_arm64.deb",
+    "sha512": "5371d38bce4271721c6ad476d53f2f3a50784cc3227590de800a35af28af284b2e73a6ea96543d1b464ee58be22e3f4229281c4f18e79b212403f1bcc6ee8856"
+  },
+  {
+    "package": "libglvnd-core-dev",
+    "version": "1.7.0-3",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libg/libglvnd/libglvnd-core-dev_1.7.0-3_arm64.deb",
+    "sha512": "9af91f707a0adb6191c1d03b29b442d557348ae8efc469b76e2a9c5fb27eaa24d97b6113aabcfd94f802c311b113dc7561a2e39d7cc9ce3b014a2a6bb11854ad"
+  },
+  {
+    "package": "libudev-dev",
+    "version": "261.3-0ubuntu3",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/s/systemd/libudev-dev_261.3-0ubuntu3_arm64.deb",
+    "sha512": "e3bf04f75989027ca0d8204e5947fcdb857230cf3594cd02af07d140d80fc4a8a9bd457f807ead182ef7d145da51db0dfa9cefd3e7bc1bf5d6be6c3856d55470"
+  },
+  {
+    "package": "libudev1",
+    "version": "261.3-0ubuntu3",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/s/systemd/libudev1_261.3-0ubuntu3_arm64.deb",
+    "sha512": "fb4263a527e1d585260a6063736c15fdb479a5740e52ea06a6ceba357da1be722fc87ec9a4b4526cabad411004fb74fe48faf742886a299fe12a0f49642f42e9"
+  },
+  {
+    "package": "libwayland-client0",
+    "version": "1.26.0-1",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/w/wayland/libwayland-client0_1.26.0-1_arm64.deb",
+    "sha512": "9ba533af900fc1e401ad61c789eef39da8578c51ebab3ddb8fbc4f941b584a92ec8d9d35e7d2b32dbc8e80ff8b424ba3f50c1eff1d32f439345fc0e097d5898a"
+  },
+  {
+    "package": "libwayland-cursor0",
+    "version": "1.26.0-1",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/w/wayland/libwayland-cursor0_1.26.0-1_arm64.deb",
+    "sha512": "46118e8e5d38128838eee5d963cff44793a008530299dc666fb73dcc2838a8695f199a69c6c7f6919ca78d5a8d862f935bbb0087cd8b0bbb6d7a35efdb0cf66c"
+  },
+  {
+    "package": "libwayland-dev",
+    "version": "1.26.0-1",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/w/wayland/libwayland-dev_1.26.0-1_arm64.deb",
+    "sha512": "01024c55525d53c87b2631d945f9478599f29947c033432ef68c8f7f5595c079b9641617bd331c2ef0f4ffa5bd9133bb2d2a8d09a20bd495e2102cda62ff2576"
+  },
+  {
+    "package": "libwayland-egl-backend-dev",
+    "version": "1.26.0-1",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/w/wayland/libwayland-egl-backend-dev_1.26.0-1_arm64.deb",
+    "sha512": "0e68ac5d838e52e00f5595b34811fdd7415d5f8342d57b8699be02457e8fee9fe67a949bb4b81057b8834ce814767e920d25a2689abb628979027cde296ea7ff"
+  },
+  {
+    "package": "libwayland-egl1",
+    "version": "1.26.0-1",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/w/wayland/libwayland-egl1_1.26.0-1_arm64.deb",
+    "sha512": "54ec29228684762fb5f8fafe60ac2680ac8b644a4f978fc62fd7e3467316e1d87d92bb6146266290e898a09d29587eb033d85151d658f4fc661944d21423b6e2"
+  },
+  {
+    "package": "libwayland-server0",
+    "version": "1.26.0-1",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/w/wayland/libwayland-server0_1.26.0-1_arm64.deb",
+    "sha512": "f2a63e34c9206e40d4a6615e920f7a691e56ff2744ee51c470e09122c871e3b8d1e42714614e32b6121b97fc95e8d429d857728ee0704112f93467be2e7ea096"
+  },
+  {
+    "package": "libx11-6",
+    "version": "2:1.8.13-1",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libx11/libx11-6_1.8.13-1_arm64.deb",
+    "sha512": "273536b8756ce0049f20e93e2e08057bf123e2a7c6d17680417e83eb8328376484cc48ce29d106b95658ae544ecac9d97b30faec379297919f7c8b50b49922db"
+  },
+  {
+    "package": "libx11-dev",
+    "version": "2:1.8.13-1",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libx11/libx11-dev_1.8.13-1_arm64.deb",
+    "sha512": "aced56de4517fab3a1b96f3ac5c5a78c8d8068831d1b373dcadff66d298763c0852a686ee22cda1348535b7a058abdf411768b6b366b5632824ed02f3fc3361f"
+  },
+  {
+    "package": "libx11-xcb-dev",
+    "version": "2:1.8.13-1",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libx11/libx11-xcb-dev_1.8.13-1_arm64.deb",
+    "sha512": "6c0e84a2f965c5cba84e6785bdf2e9da0a2e13aa1762217dec31caacfd0b9b234cb6c429fac710e5ac4bda71ea85d5094a51b0835a5f47ddee00ba6e9ab42a42"
+  },
+  {
+    "package": "libx11-xcb1",
+    "version": "2:1.8.13-1",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libx11/libx11-xcb1_1.8.13-1_arm64.deb",
+    "sha512": "530eb810608f31837d018b712540c702b20fbe45ce8e2166bc81562604dc02218d9b4c51459e36084456c2d2870d684faa569c43f759c7c7379bc51c4fc76c62"
+  },
+  {
+    "package": "libxau-dev",
+    "version": "1:1.0.11-1build2",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libxau/libxau-dev_1.0.11-1build2_arm64.deb",
+    "sha512": "75f262e886b9570684d800831d702bbf8d0c4138d02b58e4bc25c4f0285a17fee65581b3a142e58ee3e77e57ec77a9efb1ed9837205e86d97e31559df2fe9f11"
+  },
+  {
+    "package": "libxau6",
+    "version": "1:1.0.11-1build2",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libxau/libxau6_1.0.11-1build2_arm64.deb",
+    "sha512": "9c286e0b755f72367168df5587694b4c3fd9318b013a7a289fd7bf9823409d894e0666ee073bb377c244a976a4013d39914e0ef9ff9d3b9188be005f4606adf2"
+  },
+  {
+    "package": "libxcb-dri2-0",
+    "version": "1.17.0-2ubuntu1",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libxcb/libxcb-dri2-0_1.17.0-2ubuntu1_arm64.deb",
+    "sha512": "5ff893fdda26b07cf5f5cd5d0a3dc684202a7f1e01980c0cedf179c5dfc30a4135c661b6fc7d206c224f73c0dd8c89137e8505e9c9787c885a50fe668381bee2"
+  },
+  {
+    "package": "libxcb-dri2-0-dev",
+    "version": "1.17.0-2ubuntu1",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libxcb/libxcb-dri2-0-dev_1.17.0-2ubuntu1_arm64.deb",
+    "sha512": "0c0ff09f302ebe9916da838d4e41ea0591ee748e5dc3b87a50f91ed6c9cd7511ef37d9e601ea75d094dc17a66feab57025f44fe463932f72499af5fdb97c7e6a"
+  },
+  {
+    "package": "libxcb-dri3-0",
+    "version": "1.17.0-2ubuntu1",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libxcb/libxcb-dri3-0_1.17.0-2ubuntu1_arm64.deb",
+    "sha512": "f34ce2634f1f12ea6a16a5741d7a6ed8ee6e35a0de0f881f8b09c8de9e32602f8f5b204a586b68a4cd763fed4c8aee429f911f82497cfabc0b2ec01f4f645b32"
+  },
+  {
+    "package": "libxcb-dri3-dev",
+    "version": "1.17.0-2ubuntu1",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libxcb/libxcb-dri3-dev_1.17.0-2ubuntu1_arm64.deb",
+    "sha512": "78b7735ee9d3c00a7f522f21523610ab34ff9b0008740b7e2f695648261771cb17a1d724e01738ea94439170d32c5f6c60ddfea8d9abcc1fde31bf75563ed69d"
+  },
+  {
+    "package": "libxcb-glx0",
+    "version": "1.17.0-2ubuntu1",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libxcb/libxcb-glx0_1.17.0-2ubuntu1_arm64.deb",
+    "sha512": "51af0e718712bc7bef7cfda9dac6f64b80250887cd1575df2aa1a539603ead077ecb0590d91038c9fd187719045a2a7bf69c46eb34539950ff5b6f10d7eacd44"
+  },
+  {
+    "package": "libxcb-glx0-dev",
+    "version": "1.17.0-2ubuntu1",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libxcb/libxcb-glx0-dev_1.17.0-2ubuntu1_arm64.deb",
+    "sha512": "343ee521a5fca58cb541c6977d3a08089d98b12430d36ab761158c1193a14de60cda09a58e72bcfc4bf3172a5e7c448aff17f3b5e132eee30d2d12c4109d9cdc"
+  },
+  {
+    "package": "libxcb-present-dev",
+    "version": "1.17.0-2ubuntu1",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libxcb/libxcb-present-dev_1.17.0-2ubuntu1_arm64.deb",
+    "sha512": "bb1a1f2b7bfcd53274420d4095a6d11fc3aa2580f52748b399307f7bafe76e292457f6d550a27a09c4de1ea368c21a2536e66458332875432da6ec3ea23fddb8"
+  },
+  {
+    "package": "libxcb-present0",
+    "version": "1.17.0-2ubuntu1",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libxcb/libxcb-present0_1.17.0-2ubuntu1_arm64.deb",
+    "sha512": "0259b6ed084caaa53bbed98a0af796b05bc63b626131336e3f0521c94d2d4461a434ac73dba599b723679e8207cff9e308db33034631e87b292fe83337ccba57"
+  },
+  {
+    "package": "libxcb-randr0",
+    "version": "1.17.0-2ubuntu1",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libxcb/libxcb-randr0_1.17.0-2ubuntu1_arm64.deb",
+    "sha512": "ba5dddc51b7911c4f4c00f9cf8687845c161f0717281de42518de147d5ed183d3fbf855a086257845e1835900a896dcba21afe277a81b9a139f9d1e182e48060"
+  },
+  {
+    "package": "libxcb-randr0-dev",
+    "version": "1.17.0-2ubuntu1",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libxcb/libxcb-randr0-dev_1.17.0-2ubuntu1_arm64.deb",
+    "sha512": "41859105a3b0c2284672edce7cae9458617b8b1272425045bcb85886bdf3c3729eda2ea353132a0e69df23826d405100452e270583551779ed1730b1759269e2"
+  },
+  {
+    "package": "libxcb-render0",
+    "version": "1.17.0-2ubuntu1",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libxcb/libxcb-render0_1.17.0-2ubuntu1_arm64.deb",
+    "sha512": "08da4e8a69ea940ac4bda5c1a175172700b7e71a3f59abe3f57ee476030e57631beb953ec34ea7ca470e0b1b7cd81f79d0ab560200a56baebd9e2f1646500d53"
+  },
+  {
+    "package": "libxcb-render0-dev",
+    "version": "1.17.0-2ubuntu1",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libxcb/libxcb-render0-dev_1.17.0-2ubuntu1_arm64.deb",
+    "sha512": "8c4adc51839a9525c6131764800ec478108756fcb2d6224a6c48edbb76f390dc731cdbe160e1ebb8e7a7f3b63de4606bda371e95e4cd78ffa097f34aadd4a5ab"
+  },
+  {
+    "package": "libxcb-shape0",
+    "version": "1.17.0-2ubuntu1",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libxcb/libxcb-shape0_1.17.0-2ubuntu1_arm64.deb",
+    "sha512": "1025acdf39d7b97e1f78f2852569f53efed96069ba4e6b94643c1165665062a3049b7050d6017a0d9673048b2cae012db4b3e3dcbcae9dfd43e71c69852e04fa"
+  },
+  {
+    "package": "libxcb-shape0-dev",
+    "version": "1.17.0-2ubuntu1",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libxcb/libxcb-shape0-dev_1.17.0-2ubuntu1_arm64.deb",
+    "sha512": "b1ba12d8919141356086b82b37589ab0d0dc9bde7e08a3957ec17296e560eed7aa82e3a1cb3b85c4ed82eb6fe85328e3db9fc3395aeeda3941ff307aa58670bb"
+  },
+  {
+    "package": "libxcb-shm0",
+    "version": "1.17.0-2ubuntu1",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libxcb/libxcb-shm0_1.17.0-2ubuntu1_arm64.deb",
+    "sha512": "58545fb0c6413425e7c46801b758726d1a2909760164615a364950104455348c79466fcad8c8fee26b2cf75d5a78a9f315e44953f526c2b006ffceafeb807efb"
+  },
+  {
+    "package": "libxcb-shm0-dev",
+    "version": "1.17.0-2ubuntu1",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libxcb/libxcb-shm0-dev_1.17.0-2ubuntu1_arm64.deb",
+    "sha512": "68be9989a8afc02f76b3fa5d43f50f21a5e29867f24bfd93c185af112548076de90ccead5450429e2275a36c2ca408d92e8d65e0c3008f138fbc35f0949f875c"
+  },
+  {
+    "package": "libxcb-sync-dev",
+    "version": "1.17.0-2ubuntu1",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libxcb/libxcb-sync-dev_1.17.0-2ubuntu1_arm64.deb",
+    "sha512": "6500479dad0074f1b43b6f085b266353190a3325e64665551ba1041873e507278943b1436b0bc9b25da63e71ecc0327403fb0a7394b0eb9d94e9bc9cc7a45a35"
+  },
+  {
+    "package": "libxcb-sync1",
+    "version": "1.17.0-2ubuntu1",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libxcb/libxcb-sync1_1.17.0-2ubuntu1_arm64.deb",
+    "sha512": "7100e96021ded55f6eaa64c79eb4414c7f3f0b8aa12e566ec6a69122f6c712e5482651640ce7c2781b97938f4c3b5748aa2d932943989cc99f09aa80691984d3"
+  },
+  {
+    "package": "libxcb-xfixes0",
+    "version": "1.17.0-2ubuntu1",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libxcb/libxcb-xfixes0_1.17.0-2ubuntu1_arm64.deb",
+    "sha512": "456844bb8f97cb65cd6d1cb3025e47de3098bd463b2a128659792fef734062f9f940c7fe8e3698dbdeb48ba0dad00e968ae1e379b0e5a79d13711bfc90c1b8ed"
+  },
+  {
+    "package": "libxcb-xfixes0-dev",
+    "version": "1.17.0-2ubuntu1",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libxcb/libxcb-xfixes0-dev_1.17.0-2ubuntu1_arm64.deb",
+    "sha512": "7def3de959a61c4d39ac24359509fa9ebb160def55d6ea67c15a446356e9c82dda172803fb8827e94fd2f0a20e70e5f90ae04ee32ca82f71926bb0197f5ba8a2"
+  },
+  {
+    "package": "libxcb1",
+    "version": "1.17.0-2ubuntu1",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libxcb/libxcb1_1.17.0-2ubuntu1_arm64.deb",
+    "sha512": "37057e4b8b82725180239eeae9e501ab531adccc052b72743fad6ace5f2fef896b8b51337a030c85c788d1457a1d54a6fa56113a28d55b1dfc963488b91c098c"
+  },
+  {
+    "package": "libxcb1-dev",
+    "version": "1.17.0-2ubuntu1",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libxcb/libxcb1-dev_1.17.0-2ubuntu1_arm64.deb",
+    "sha512": "830ae21ce2de3d6ea9c69f13549309de10255e0c65c8852551d8187ca228dd66226e02f85099c66f58c312996e7ad85c41506a11bed3288a79d4393787814167"
+  },
+  {
+    "package": "libxdmcp-dev",
+    "version": "1:1.1.5-2",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libxdmcp/libxdmcp-dev_1.1.5-2_arm64.deb",
+    "sha512": "d0f33607c9a5cb7d5a2e6a078c0be7c16c089a269252985a5f6718c55638095f6db1fc6ff50d21be8fcebce27010372478f5defde9c54170ead8a8e133cd453e"
+  },
+  {
+    "package": "libxdmcp6",
+    "version": "1:1.1.5-2",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libxdmcp/libxdmcp6_1.1.5-2_arm64.deb",
+    "sha512": "c1d31103ef502d7b1eac43bcd61999206e3b69ab36f185976d84ed2b3bf4e27285e09671a52c05adbb357698c6b17eb0717cf3fa7b62be6309c238da790de15f"
+  },
+  {
+    "package": "libxext-dev",
+    "version": "2:1.3.4-1build3",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libxext/libxext-dev_1.3.4-1build3_arm64.deb",
+    "sha512": "8a3249a6db7fdc1fb92a23f926ca3e4717eb734bb33011633d01253415a51670e8954876a94747081a6e4ae8caecd01d44e9627818b3eea499371418b270cf8d"
+  },
+  {
+    "package": "libxext6",
+    "version": "2:1.3.4-1build3",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libxext/libxext6_1.3.4-1build3_arm64.deb",
+    "sha512": "fd86fc5849e69b4e9b180277231b70546d4bc9021a544674bdf01aab76577c130badae07b2e4976c99455d6cb0d387ab041b23cb4c33f14dfc64d4db1259480f"
+  },
+  {
+    "package": "libxfixes-dev",
+    "version": "1:6.0.0-2build2",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libxfixes/libxfixes-dev_6.0.0-2build2_arm64.deb",
+    "sha512": "1a22e24b15e31d9ed00df0a9d0ab9d8eabf771c41a8accb33641f4fdb0eba44422e6588a952d0cafd44d3d24fa47732b183fc2052051799731bdcca7389ec3fd"
+  },
+  {
+    "package": "libxfixes3",
+    "version": "1:6.0.0-2build2",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libxfixes/libxfixes3_6.0.0-2build2_arm64.deb",
+    "sha512": "74de432b11e65a0090fef03d805ca26d4c12b185d74d1e50f2c9041e05ccbd5bba2a99acf4cb090b4217cfda9005a8632e690d50fbab5af5dbfc1c114221c3a6"
+  },
+  {
+    "package": "libxrandr-dev",
+    "version": "2:1.5.4-1build1",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libxrandr/libxrandr-dev_1.5.4-1build1_arm64.deb",
+    "sha512": "795bedbf642083dc4bb0d03c60f4f2d9ccb91db8c374e1a0575631ad4dd8e90d7a9211e56ac0e6b766f30c4e66f2538028354251483630f9c5dd4e8e7d84e345"
+  },
+  {
+    "package": "libxrandr2",
+    "version": "2:1.5.4-1build1",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libxrandr/libxrandr2_1.5.4-1build1_arm64.deb",
+    "sha512": "aeadfbc24b23fca71346109e6cde28dfd1cdff867a7f18f8bb35e321ba79c6188c076d14b23f6c6248ebd481f9ceb4c4c926a63c3fa8a4f73f7f87f14ea5826e"
+  },
+  {
+    "package": "libxrender-dev",
+    "version": "1:0.9.12-1build1",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libxrender/libxrender-dev_0.9.12-1build1_arm64.deb",
+    "sha512": "6ef92f608492d4130c9c21564e5d78c330b2721890ee6d6bdacb5a3da955e434d9d24acebe2fa26f7eba523ba6bdc3cd886d5d571d6fe266f80dbd91230ff375"
+  },
+  {
+    "package": "libxrender1",
+    "version": "1:0.9.12-1build1",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libxrender/libxrender1_0.9.12-1build1_arm64.deb",
+    "sha512": "722a259bf9eafaabc8dad6767903645c1a6ab99299d280b2048a7acc6ce884a1fec3d7b03f7cc596663dcb4e1d38fa0d3bba8b89d8032982a7263b7b7cfec787"
+  },
+  {
+    "package": "libxshmfence-dev",
+    "version": "1.3.3-1build1",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libxshmfence/libxshmfence-dev_1.3.3-1build1_arm64.deb",
+    "sha512": "fbda32f17ec4372ced891fd73672392fd1816c21325e0d5585511447a7699528a4c43f00213d8e0648eae3409ae7f31b515f7b8bbd78e5852e1c57b323e50d03"
+  },
+  {
+    "package": "libxshmfence1",
+    "version": "1.3.3-1build1",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libxshmfence/libxshmfence1_1.3.3-1build1_arm64.deb",
+    "sha512": "54acc39351517a21d567949c6e88ac19ebed1bff5d8c085e2aa6b5aaa85efa0ce8e007fb724c4e07773c9b83377128f0da9dbb4f001677ffa4f246b210716c04"
+  },
+  {
+    "package": "libxxf86vm-dev",
+    "version": "1:1.1.4-2",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libxxf86vm/libxxf86vm-dev_1.1.4-2_arm64.deb",
+    "sha512": "8a597c4a434b71fba9232090ded2201e9c5961f1948800eefa118714980ae602499cb3d446cc11b75ce0097cd75a857d26cf237f27186fb7788311a9a7f61143"
+  },
+  {
+    "package": "libxxf86vm1",
+    "version": "1:1.1.4-2",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libx/libxxf86vm/libxxf86vm1_1.1.4-2_arm64.deb",
+    "sha512": "a1a64495139b4848bc9f2264744e5b3b1246d8c78b7032eb179fc51fc70ec138bcb9e3c33d64f9f18b4f24993ee2c46d37a96e902fa7e4ee6eeb0d17e2d42092"
+  },
+  {
+    "package": "libzstd-dev",
+    "version": "1.5.7+dfsg-4",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libz/libzstd/libzstd-dev_1.5.7+dfsg-4_arm64.deb",
+    "sha512": "a72f7aa9379f1016025d31529274209ce6f29abc03198b77ff82d4e56675db93a9fe9759ba7cd84869fd3f855b13d6edfd53497c132d8712f39c9fa2d119a7c2"
+  },
+  {
+    "package": "libzstd1",
+    "version": "1.5.7+dfsg-4",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/libz/libzstd/libzstd1_1.5.7+dfsg-4_arm64.deb",
+    "sha512": "7c34201c78c3df0a9f54ca7473d1f7136195f7521c04b69f6fbf6841344e7341be83d0177e58507670ce1ec3f2fcb1294914f17b47511c8b11c67c1bc176231c"
+  },
+  {
+    "package": "wayland-protocols",
+    "version": "1.49-1",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/w/wayland-protocols/wayland-protocols_1.49-1_all.deb",
+    "sha512": "db6c10cd4a99585f44f986d010b09a68d865e9f27f63b362339e096eeb05a44ccd40da179b39d25148ff8d05ce86457eadfc6018aadfff9012a2ad683e8ef01f"
+  },
+  {
+    "package": "x11proto-dev",
+    "version": "2025.1-1",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/x/xorgproto/x11proto-dev_2025.1-1_all.deb",
+    "sha512": "fad9339cbaccc6b50d63ee83dd7031a054a99bd6abdce9eef6155b5a7dd722c915e8969545f2d92a8848b2885f1a54d90eb049091e9437abe61e4b0adca31fef"
+  },
+  {
+    "package": "xtrans-dev",
+    "version": "1.6.0-1build1",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/x/xtrans/xtrans-dev_1.6.0-1build1_all.deb",
+    "sha512": "e092f19a563bdde6731cb9efd8ae81540cfd48a5797a8b0e7c06ce2711553662fa2131ffd778ff01a085cc62bb3870915d399d498980b2881a3a841d75f662ac"
+  },
+  {
+    "package": "zlib1g",
+    "version": "1:1.3.dfsg+really1.3.2-3ubuntu1",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/z/zlib/zlib1g_1.3.dfsg+really1.3.2-3ubuntu1_arm64.deb",
+    "sha512": "991a0d5de5eee35ce0b0bf08b1cb9aadb0302346d44a5ac299a67fd7cdbab3b79e2378ed4d72bc60d2b32932a7d6bf3aa837a8e0ad641b858f8fc927e4040627"
+  },
+  {
+    "package": "zlib1g-dev",
+    "version": "1:1.3.dfsg+really1.3.2-3ubuntu1",
+    "url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/z/zlib/zlib1g-dev_1.3.dfsg+really1.3.2-3ubuntu1_arm64.deb",
+    "sha512": "e6dd1d4d5c24588d41a5d19d06cdb56817cc2a31670d76b2fb217947bf01965da085793627f370f1ff4a0af58a348c980e3c58371967a9a98ae96a98e3d80a01"
+  }
+]

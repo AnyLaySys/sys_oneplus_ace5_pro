@@ -1,0 +1,20 @@
+[ubuntu]
+version = "26.10"
+suite = "stonking"
+base_url = "https://cdimage.ubuntu.com/ubuntu-base/releases/26.10/beta/"
+base_file = "ubuntu-base-26.10-beta-base-arm64.tar.gz"
+base_sha256 = "04fcfbdd895c8c20fc98d3a3c1fc18a7fa424437e65d39a28179e347bd6bb5e5"
+archive = "https://ports.ubuntu.com/ubuntu-ports"
+
+[inputs]
+kernel = "../linux_oneplus_ace5_pro/out/kernel"
+uefi_image = "../Mu-Silicium/Mu-hummer.img"
+uefi_fd = "../Mu-Silicium/Build/hummerPkg/RELEASE_CLANGPDB/FV/SILICIUM_UEFI.fd"
+boot_shim = "../Mu-Silicium/BootShim/BootShim.bin"
+
+[rootfs]
+uuid = "6cb758d4-a0d4-4f53-9286-2a9f92ee6390"
+label = "als"
+hostname = "ace5pro"
+locale = "zh_CN.UTF-8"
+timezone = "Asia/Shanghai"

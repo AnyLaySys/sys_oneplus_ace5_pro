@@ -1,0 +1,1372 @@
+From a30c83f62ec91165290308261a8be8ecc704a1b9 Mon Sep 17 00:00:00 2001
+From: bluseliu50 <265648257+bluseliu50@users.noreply.github.com>
+Date: Sun, 27 Sep 2026 16:26:34 +0800
+Subject: [PATCH] wlanbt: WLAN + Bluetooth bring-up (milestone-btwlan-1) (#16)
+
+Staged WLAN/Bluetooth bring-up for the test image (milestone-btwlan-1).
+
+- dtbo-piano-wlanbt: Peach v2 PMU (qcom,wcn7861-pmu, AOSS/PDC tables,
+  RF_CLK1), mainline pcie0 + QMP PHY, wifi@0 with PMU supplies and a
+  local-mac-address, stock cnss_pci0 removed from the devfn match, uart14
+  with qcom,wcn7861-bt, BT_EN on PMIC power source 1 (required for the
+  radio)
+- init: staged BT then WLAN bring-up with a stage log, hci_uart
+  piano_peri=106, BT idle-survival probes, WLAN scan proof
+- bt-scan: raw-HCI LE scanner using extended scanning
+
+Tested on the device: Bluetooth up at 8 Mbaud and stable, WLAN 2.4 + 5 GHz
+scan.
+---
+ boot/dtbo-piano-wlanbt.dts        | 646 ++++++++++++++++++++++++++++++
+ initramfs/bt-scan/piano-bt-scan.c | 285 +++++++++++++
+ initramfs/init                    | 148 ++++++-
+ initramfs/tests/piano-bt-test     |   6 +-
+ initramfs/tests/piano-qup-smmu    |  44 +-
+ initramfs/tests/piano-tests       |  11 +-
+ scripts/build-initramfs.sh        |  16 +-
+ scripts/build-touch-view.sh       |   9 +-
+ 8 files changed, 1141 insertions(+), 24 deletions(-)
+ create mode 100644 boot/dtbo-piano-wlanbt.dts
+ create mode 100644 initramfs/bt-scan/piano-bt-scan.c
+
+diff --git a/boot/dtbo-piano-wlanbt.dts b/boot/dtbo-piano-wlanbt.dts
+new file mode 100644
+index 0000000..1b2c296
+--- /dev/null
++++ b/boot/dtbo-piano-wlanbt.dts
+@@ -0,0 +1,646 @@
++/*
++ * WLAN/BT bring-up overlay (peach / WCN7850 family combo), stacked on the
++ * device-verified milestone-touch overlay.  Everything below follows the
++ * same rules as dtbo-piano-touch-v2.dts: the live base tree is the stock
++ * vendor DTB (1-cell /soc addressing), fragments only add or override, and
++ * every risky consumer is bound to a module driver that the initramfs
++ * loads in a staged, observable order after the debug shell is up.
++ *
++ * Hardware facts (cross-checked against the stock tree):
++ *   - WLAN half: PCI 17cb:110e on pcie0 (stock qcom,cnss-peach@b0000000,
++ *     supported-ids = <0x110e>), WLAN_EN = TLMM gpio16, PERST# = gpio102,
++ *     CLKREQ# = gpio103, WAKE = gpio104, RF clock = RPMh RF_CLK1.
++ *   - BT half: SE14 UART on QUP2 (TX gpio26, RX gpio27, CTS gpio24,
++ *     RTS gpio25 -- stock qupv3_se14_* states), BT_EN = PM8550VE-F
++ *     gpio3 (stock qcom,bt-en-gpio = <&pm8550ve_f_gpios 3>).
++ *   - Combo PMU input rails (stock cnss/bt supply phandles resolved to
++ *     the downstream rpmh regulator nodes): vdd/vdddig = S5F, vddaon =
++ *     S4D, vddio = L3F, vddio1p2 = L2F, vddrfa1p2 = S7I, vddrfa1p8 = S3G.
++ *
++ * The mainline rpmh-regulator driver cannot bind the downstream VRM nodes
++ * (children of the non-compatible drv@2 node, vendor compatible), so the
++ * exact regulator set the PMU needs is re-declared as mainline blocks
++ * directly under apps_rsc — the same pattern that already carries
++ * rpmhcc/bcm-voter (fragment@215 of the milestone-1 base).  Each window
++ * starts at the stock qcom,init-voltage and every rail is always-on: they
++ * are shared parents of display/USB rails, so HLOS must never drop the
++ * APPS vote.  L3G also supplies the DSI and USB PHYs; up to R17 the PCIe
++ * PHY owned it, so any disable on the PCIe error path cut the live panel
++ * and the NCM link (matching the observed screen corruption + reset).
++ *
++ * pcie0 keeps the stock ranges/dma-coherent but moves reg/interrupts/
++ * clocks/resets to the mainline layout.  The stock iommu-map/msi-map are
++ * DELETED: the apps SMMU stays on its downstream compatible (no driver),
++ * so an iommu-map would defer every PCI function forever, and the msi-map
++ * target (downstream qcom,pci-msi controller) is disabled.  MSI runs on
++ * the eight dedicated msi0..msi7 SPI lines; the SMMU stream matches for
++ * 0x1400/0x1401 are added from the initramfs (piano-qup-smmu).
++ */
++#include "dtbo-piano-touch-v2.dts"
++
++#include <dt-bindings/clock/qcom,rpmh.h>
++#include <dt-bindings/clock/qcom,sm8750-gcc.h>
++#include <dt-bindings/clock/qcom,sm8750-tcsr.h>
++#include <dt-bindings/gpio/gpio.h>
++#include <dt-bindings/interconnect/qcom,icc.h>
++#include <dt-bindings/interconnect/qcom,sm8750-rpmh.h>
++#include <dt-bindings/regulator/qcom,rpmh-regulator.h>
++
++/ {
++	/*
++	 * mainline rpmh regulators for the WCN PMU input rails (see header).
++	 *
++	 * R18: every rail is always-on and its window starts at the stock
++	 * qcom,init-voltage.  These are shared parents (S3G feeds the panel
++	 * LDO L12B, S7I feeds L3G = DSI/USB PHY 1.2 V) and the APPS DRV vote
++	 * is the one the bootloader left behind: a consumer disable on the
++	 * error path, or a registration-time vote below the stock voltage,
++	 * pulls those rails out from under the live display and the NCM link.
++	 * L1F/L3G/S1D are no longer declared at all (see fragment@233/234).
++	 */
++	fragment@229 {
++		target = <&apps_rsc>;
++		__overlay__ {
++			wcn_regs_d: regulators-0 {
++				compatible = "qcom,pm8550ve-rpmh-regulators";
++				vdd-s4-supply = <&vph_pwr_ml>;
++				qcom,pmic-id = "d";
++
++				vreg_s4d_0p85_ml: smps4 {
++					regulator-name = "vreg_s4d_0p85_ml";
++					regulator-min-microvolt = <852000>;
++					regulator-max-microvolt = <1036000>;
++					regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
++					regulator-always-on;
++				};
++			};
++
++			wcn_regs_f: regulators-1 {
++				compatible = "qcom,pm8550ve-rpmh-regulators";
++				vdd-l2-supply = <&vreg_s7i_1p2_ml>;
++				vdd-l3-supply = <&vreg_s3g_1p8_ml>;
++				vdd-s5-supply = <&vph_pwr_ml>;
++				qcom,pmic-id = "f";
++
++				vreg_s5f_0p85_ml: smps5 {
++					regulator-name = "vreg_s5f_0p85_ml";
++					regulator-min-microvolt = <852000>;
++					regulator-max-microvolt = <1000000>;
++					regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
++					regulator-always-on;
++				};
++
++				vreg_l2f_1p2_ml: ldo2 {
++					regulator-name = "vreg_l2f_1p2_ml";
++					regulator-min-microvolt = <1200000>;
++					regulator-max-microvolt = <1200000>;
++					regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
++					regulator-always-on;
++				};
++
++				vreg_l3f_1p8_ml: ldo3 {
++					regulator-name = "vreg_l3f_1p8_ml";
++					regulator-min-microvolt = <1800000>;
++					regulator-max-microvolt = <1800000>;
++					regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
++					regulator-always-on;
++				};
++			};
++
++			wcn_regs_g: regulators-2 {
++				compatible = "qcom,pm8550ve-rpmh-regulators";
++				vdd-s3-supply = <&vph_pwr_ml>;
++				qcom,pmic-id = "g";
++
++				vreg_s3g_1p8_ml: smps3 {
++					regulator-name = "vreg_s3g_1p8_ml";
++					regulator-min-microvolt = <1856000>;
++					regulator-max-microvolt = <2000000>;
++					regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
++					regulator-always-on;
++				};
++			};
++
++			wcn_regs_i: regulators-3 {
++				compatible = "qcom,pm8550ve-rpmh-regulators";
++				vdd-s7-supply = <&vph_pwr_ml>;
++				qcom,pmic-id = "i";
++
++				vreg_s7i_1p2_ml: smps7 {
++					regulator-name = "vreg_s7i_1p2_ml";
++					regulator-min-microvolt = <1256000>;
++					regulator-max-microvolt = <1340000>;
++					regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
++					regulator-always-on;
++				};
++			};
++		};
++	};
++
++	/* board main rail dummy + the combo PMU (power sequencer unit) */
++	fragment@230 {
++		target-path = "/";
++		__overlay__ {
++			vph_pwr_ml: vph-pwr-regulator-ml {
++				compatible = "regulator-fixed";
++				regulator-name = "vph_pwr_ml";
++				regulator-min-microvolt = <3700000>;
++				regulator-max-microvolt = <3700000>;
++				regulator-always-on;
++				regulator-boot-on;
++			};
++
++			/*
++			 * Stand-in for L1F (0.88 V) and L3G (1.2 V), the PCIe PHY
++			 * rails.  Both also feed the DSI and USB PHYs and stay on
++			 * for the whole session; the stock pcie0 node does not vote
++			 * them either.  HLOS must never switch them.
++			 */
++			pcie0_phy_rails_ml: pcie0-phy-rails-ml {
++				compatible = "regulator-fixed";
++				regulator-name = "pcie0_phy_rails_ml";
++				regulator-always-on;
++				regulator-boot-on;
++			};
++
++			/*
++			 * R20: stand-in for TCSR_PCIE_0_CLKREF_EN.  The base overlay
++			 * (fragment@202) turned the stock syscon@1fc0000 into the
++			 * mainline tcsrcc, but the clkref block lives at 0xf204008
++			 * (stock and mainline tcsrcc agree; PCIe0 = offset 0x0).
++			 * R19 reset exactly when the PHY enabled "ref", i.e. wrote
++			 * bit 0 of 0x1fc0000.  The initramfs sets the real enable
++			 * bit before the PHY loads; the PHY only sees this dummy.
++			 */
++			pcie0_clkref_ml: pcie0-clkref-ml {
++				compatible = "fixed-clock";
++				#clock-cells = <0>;
++				clock-frequency = <19200000>;
++				clock-output-names = "pcie0_clkref_ml";
++			};
++
++			/*
++			 * Peach v2 combo (WCN7861 in the Lenovo Y700 Gen4 port):
++			 * WCN7850 rails plus the AOSS/PDC setup the stock cnss2
++			 * and btpower drivers send (qcom,pdc_init_table,
++			 * qcom,vreg_pdc_map and qcom,pmu_vreg_map of the stock
++			 * cnss-peach / bt_peach nodes).
++			 *
++			 * The reference clock is RPMh RF_CLK1, which stock
++			 * btpower votes for as long as BT is on ("bt_rf_clk1" in
++			 * bt_peach).  Without that vote the Brahma controller
++			 * came up and answered HCI while busy, then stopped
++			 * responding after some idle time without any host
++			 * sleep indication having been sent.
++			 */
++			wcn7850_pmu_ml: wcn7850-pmu {
++				compatible = "qcom,wcn7861-pmu";
++
++				clocks = <&rpmhcc_ml RPMH_RF_CLK1>;
++
++				qcom,qmp = <&aoss_qmp>;
++				qcom,pdc-init-table =
++					"{class: wlan_pdc, ss: rf, res: s5f.m, enable: 1}",
++					"{class: wlan_pdc, ss: rf, res: s5f.v, enable: 1}",
++					"{class: wlan_pdc, ss: rf, res: s5f.v, upval: 876}",
++					"{class: wlan_pdc, ss: rf, res: s5f.v, dwnval: 876}";
++				qcom,vreg-pdc-map = "s5f:rf", "s4d:bb", "s3g:rf",
++						    "s7i:rf";
++				qcom,pmu-vreg-map =
++					"VDDD_AON_0P9:s5f", "VDDA_RFA_1P9:s3g",
++					"VDDA_RFA_1P3:s7i", "VDDA_RFA_0P9:s5f",
++					"VDDD_WLMX_0P9:s4d", "VDDD_WLCX_0P9:s5f",
++					"VDDD_BTCX_0P9:s5f", "VDDD_BTCMX_0P9:s5f",
++					"VDDA_PCIE_1P2:s7i", "VDDA_PCIE_0P9:s7i";
++
++				pinctrl-names = "default";
++				pinctrl-0 = <&wlan_en_ml>, <&bt_en_ml>;
++
++				wlan-enable-gpios = <&piano_tlmm_ml 16 GPIO_ACTIVE_HIGH>;
++			/* Round 6: restored — the qcom-spmi-gpio chips are all
++			 * bound (field log 5); the earlier defer is moot. */
++			bt-enable-gpios = <&pm8550ve_f_gpios 3 GPIO_ACTIVE_HIGH>;
++
++				vdd-supply = <&vreg_s5f_0p85_ml>;
++				vddio-supply = <&vreg_l3f_1p8_ml>;
++				vddio1p2-supply = <&vreg_l2f_1p2_ml>;
++				vddaon-supply = <&vreg_s4d_0p85_ml>;
++				vdddig-supply = <&vreg_s5f_0p85_ml>;
++				vddrfa1p2-supply = <&vreg_s7i_1p2_ml>;
++				vddrfa1p8-supply = <&vreg_s3g_1p8_ml>;
++
++
++				regulators {
++					vreg_pmu_rfa_cmn_ml: ldo0 {
++						regulator-name = "vreg_pmu_rfa_cmn";
++					};
++
++					vreg_pmu_aon_0p59_ml: ldo1 {
++						regulator-name = "vreg_pmu_aon_0p59";
++					};
++
++					vreg_pmu_wlcx_0p8_ml: ldo2 {
++						regulator-name = "vreg_pmu_wlcx_0p8";
++					};
++
++					vreg_pmu_wlmx_0p85_ml: ldo3 {
++						regulator-name = "vreg_pmu_wlmx_0p85";
++					};
++
++					vreg_pmu_btcmx_0p85_ml: ldo4 {
++						regulator-name = "vreg_pmu_btcmx_0p85";
++					};
++
++					vreg_pmu_rfa_0p8_ml: ldo5 {
++						regulator-name = "vreg_pmu_rfa_0p8";
++					};
++
++					vreg_pmu_rfa_1p2_ml: ldo6 {
++						regulator-name = "vreg_pmu_rfa_1p2";
++					};
++
++					vreg_pmu_rfa_1p8_ml: ldo7 {
++						regulator-name = "vreg_pmu_rfa_1p8";
++					};
++
++					vreg_pmu_pcie_0p9_ml: ldo8 {
++						regulator-name = "vreg_pmu_pcie_0p9";
++					};
++
++					vreg_pmu_pcie_1p8_ml: ldo9 {
++						regulator-name = "vreg_pmu_pcie_1p8";
++					};
++				};
++			};
++		};
++	};
++
++	/*
++	 * BT_EN (stock bt_uwb_en): PM8550VE-F gpio3 as a normal output on
++	 * power source 1, as the stock tree configures it.  The bootloader
++	 * leaves it on vin-2, where the Brahma controller still boots and
++	 * answers HCI but its radio is effectively disconnected: a few
++	 * advertising reports per 10 s scan, and invisible to a phone next to
++	 * it.  On power source 1 the same scan sees hundreds of reports.
++	 */
++	fragment@239 {
++		/* by path: the pm8550ve_f_gpios label is local to this overlay */
++		target-path = "/soc/qcom,spmi@c42d000/qcom,pm8550ve@5/pinctrl@8800";
++		__overlay__ {
++			bt_en_ml: bt-en-state {
++				pins = "gpio3";
++				function = "normal";
++				power-source = <1>;
++				output-enable;
++				input-disable;
++				bias-disable;
++			};
++		};
++	};
++
++	/* board pin states on the mainline TLMM node (touch-v2 fragment@226) */
++	fragment@231 {
++		target-path = "/soc/pinctrl@f100000";
++		__overlay__ {
++			/* stock wlan_en_active: gpio16, drive 8, pull-down */
++			wlan_en_ml: wlan-en-state {
++				pins = "gpio16";
++				function = "gpio";
++				drive-strength = <8>;
++				bias-pull-down;
++			};
++
++			/*
++			 * uart14 lanes with the stock qupv3_se14_{cts,rts,tx,
++			 * rx_active} biases: CTS l0 gpio24 no bias, RTS l1 gpio25
++			 * pull-down, TX l2 gpio26 pull-up, RX l3 gpio27 no bias.
++			 */
++			qup_uart14_default_ml: qup-uart14-default-state {
++				cts-pins {
++					pins = "gpio24";
++					function = "qup2_se6";
++					drive-strength = <2>;
++					bias-disable;
++				};
++
++				rts-pins {
++					pins = "gpio25";
++					function = "qup2_se6";
++					drive-strength = <2>;
++					bias-pull-down;
++				};
++
++				tx-pins {
++					pins = "gpio26";
++					function = "qup2_se6";
++					drive-strength = <2>;
++					bias-pull-up;
++				};
++
++				rx-pins {
++					pins = "gpio27";
++					function = "qup2_se6";
++					drive-strength = <2>;
++					bias-disable;
++				};
++			};
++
++			/* upstream pcie0-default-state: perst/clkreq/wake */
++			pcie0_default_ml: pcie0-default-state {
++				perst-pins {
++					pins = "gpio102";
++					function = "gpio";
++					drive-strength = <2>;
++					bias-pull-down;
++				};
++
++				clkreq-pins {
++					pins = "gpio103";
++					function = "pcie0_clk_req_n";
++					drive-strength = <2>;
++					bias-pull-up;
++				};
++
++				wake-pins {
++					pins = "gpio104";
++					function = "gpio";
++					drive-strength = <2>;
++					bias-pull-up;
++				};
++			};
++		};
++	};
++
++	/* BT HCI UART: SE14 as a mainline geni-uart with the hci_qca serdev
++	 * child (pwrseq "bluetooth" target powers it before fw download) */
++	fragment@232 {
++		target-path = "/soc/qcom,qupv3_2_geni_se@8c0000/qcom,qup_uart@898000";
++		__overlay__ {
++			compatible = "qcom,geni-uart";
++			status = "okay";
++			current-speed = <115200>;
++
++			clocks = <&gcc GCC_QUPV3_WRAP2_S6_CLK>;
++			clock-names = "se";
++
++			interconnects = <&clk_virt MASTER_QUP_CORE_2 QCOM_ICC_TAG_ALWAYS
++					 &clk_virt SLAVE_QUP_CORE_2 QCOM_ICC_TAG_ALWAYS>,
++					<&gem_noc MASTER_APPSS_PROC QCOM_ICC_TAG_ALWAYS
++					 &config_noc SLAVE_QUP_2 QCOM_ICC_TAG_ALWAYS>;
++			interconnect-names = "qup-core", "qup-config";
++
++			pinctrl-names = "default";
++			pinctrl-0 = <&qup_uart14_default_ml>;
++			/* drop the vendor active/sleep/shutdown state phandles:
++			 * they mux via qup2_se6_lN lane variants that only the
++			 * downstream Sun pinctrl driver implements */
++			pinctrl-1;
++			pinctrl-2;
++			pinctrl-3;
++
++			bluetooth {
++				compatible = "qcom,wcn7861-bt";
++
++				vddrfacmn-supply = <&vreg_pmu_rfa_cmn_ml>;
++				vddaon-supply = <&vreg_pmu_aon_0p59_ml>;
++				vddwlcx-supply = <&vreg_pmu_wlcx_0p8_ml>;
++				vddwlmx-supply = <&vreg_pmu_wlmx_0p85_ml>;
++				vddrfa0p8-supply = <&vreg_pmu_rfa_0p8_ml>;
++				vddrfa1p2-supply = <&vreg_pmu_rfa_1p2_ml>;
++				vddrfa1p8-supply = <&vreg_pmu_rfa_1p8_ml>;
++
++				/*
++				 * Brahma v2 (product 0x21, ROM 0x200): the stock HAL
++				 * skips the 0xfc48 baud change and downloads at the
++				 * init rate; hci_qca does the same for this tuple.
++				 * 8 Mbaud is only written into the NVM HCI tag.
++				 */
++				max-speed = <8000000>;
++				firmware-name = "brhbtnv20.bin", "brhbtfw20.tlv";
++
++				/*
++				 * The factory address lives in the Android persist
++				 * partition; until that is read, use a locally
++				 * administered one (02:50:49:41:4e:4f, "PIANO"),
++				 * little-endian as the binding requires.  Only used
++				 * when the controller reports its default address.
++				 */
++				local-bd-address = [4f 4e 41 49 50 02];
++			};
++		};
++	};
++
++	/* pcie0: mainline binding on the stock node (module driver) */
++	fragment@233 {
++		target-path = "/soc/pcie@1c00000";
++		__overlay__ {
++			compatible = "qcom,pcie-sm8750", "qcom,pcie-sm8550";
++
++			reg = <0x1c00000 0x3000>,
++			      <0x40000000 0xf1d>,
++			      <0x40000f20 0xa8>,
++			      <0x40001000 0x1000>,
++			      <0x40100000 0x100000>,
++			      <0x1c03000 0x1000>;
++			reg-names = "parf", "dbi", "elbi", "atu", "config", "mhi";
++
++			bus-range = <0x00 0xff>;
++			num-lanes = <2>;
++
++			interrupts = <GIC_SPI 141 IRQ_TYPE_LEVEL_HIGH>,
++				     <GIC_SPI 142 IRQ_TYPE_LEVEL_HIGH>,
++				     <GIC_SPI 143 IRQ_TYPE_LEVEL_HIGH>,
++				     <GIC_SPI 144 IRQ_TYPE_LEVEL_HIGH>,
++				     <GIC_SPI 145 IRQ_TYPE_LEVEL_HIGH>,
++				     <GIC_SPI 146 IRQ_TYPE_LEVEL_HIGH>,
++				     <GIC_SPI 147 IRQ_TYPE_LEVEL_HIGH>,
++				     <GIC_SPI 148 IRQ_TYPE_LEVEL_HIGH>,
++				     <GIC_SPI 140 IRQ_TYPE_LEVEL_HIGH>;
++			interrupt-names = "msi0", "msi1", "msi2", "msi3",
++					  "msi4", "msi5", "msi6", "msi7",
++					  "global";
++
++			#interrupt-cells = <1>;
++			interrupt-map-mask = <0 0 0 0x7>;
++			interrupt-map = <0 0 0 1 &intc 0 0 GIC_SPI 149 IRQ_TYPE_LEVEL_HIGH>,
++					<0 0 0 2 &intc 0 0 GIC_SPI 150 IRQ_TYPE_LEVEL_HIGH>,
++					<0 0 0 3 &intc 0 0 GIC_SPI 151 IRQ_TYPE_LEVEL_HIGH>,
++					<0 0 0 4 &intc 0 0 GIC_SPI 152 IRQ_TYPE_LEVEL_HIGH>;
++
++			clocks = <&gcc GCC_PCIE_0_AUX_CLK>,
++				 <&gcc GCC_PCIE_0_CFG_AHB_CLK>,
++				 <&gcc GCC_PCIE_0_MSTR_AXI_CLK>,
++				 <&gcc GCC_PCIE_0_SLV_AXI_CLK>,
++				 <&gcc GCC_PCIE_0_SLV_Q2A_AXI_CLK>,
++				 <&gcc GCC_DDRSS_PCIE_SF_QTB_CLK>,
++				 <&gcc GCC_AGGRE_NOC_PCIE_AXI_CLK>,
++				 <&gcc GCC_CNOC_PCIE_SF_AXI_CLK>;
++			clock-names = "aux", "cfg", "bus_master", "bus_slave",
++				      "slave_q2a", "ddrss_sf_tbu", "noc_aggr",
++				      "cnoc_sf_axi";
++
++			resets = <&gcc GCC_PCIE_0_BCR>;
++			reset-names = "pci";
++
++			/* ops_1_9_0 get_resources: bulk_get("vdda","vddpe-3v3")
++			 * fails -ENODEV (silently!) when the properties are
++			 * absent — root cause of every -61 field round. */
++			vdda-supply = <&pcie0_phy_rails_ml>;
++			vddpe-3v3-supply = <&vph_pwr_ml>;
++
++			power-domains = <&gcc GCC_PCIE_0_GDSC>;
++
++			pinctrl-names = "default";
++			pinctrl-0 = <&pcie0_default_ml>;
++			pinctrl-1;
++			/* Round 9: the -61 was qcom_pcie_icc_init's
++			 * devm_of_icc_get("pcie-mem") returning -ENODEV for
++			 * the neutered property — give pcie0 the upstream
++			 * 2-cell paths (pcie_noc is mainlined in
++			 * fragment@238, same treatment as the other NoCs). */
++			interconnects = <&pcie_noc MASTER_PCIE_0 QCOM_ICC_TAG_ALWAYS
++					 &mc_virt SLAVE_EBI1 QCOM_ICC_TAG_ALWAYS>,
++					<&gem_noc MASTER_APPSS_PROC QCOM_ICC_TAG_ALWAYS
++					 &cnoc_main SLAVE_PCIE_0 QCOM_ICC_TAG_ALWAYS>;
++			interconnect-names = "pcie-mem", "cpu-pcie";
++			gdsc-phy-vdd-supply;
++			qcom,bw-scale;
++			/* downstream msi/iommu maps (see header comment) */
++			msi-map;
++			iommu-map;
++			/* vendor gpio prop names; the mainline driver takes
++			 * PERST# from the port child node (fragment@235) */
++			perst-gpio;
++			wake-gpio;
++
++			status = "okay";
++		};
++	};
++
++	/* QMP gen3x2 PCIe phy for pcie0 (upstream sm8750.dtsi content) */
++	fragment@234 {
++		target-path = "/soc";
++		__overlay__ {
++			pcie0_phy_ml: phy@1c06000 {
++				compatible = "qcom,sm8750-qmp-gen3x2-pcie-phy";
++				reg = <0x1c06000 0x2000>;
++
++				clocks = <&gcc GCC_PCIE_0_AUX_CLK>,
++					 <&gcc GCC_PCIE_0_CFG_AHB_CLK>,
++					 <&pcie0_clkref_ml>,
++					 <&gcc GCC_PCIE_0_PHY_RCHNG_CLK>,
++					 <&gcc GCC_PCIE_0_PIPE_CLK>;
++				clock-names = "aux", "cfg_ahb", "ref", "rchng",
++					      "pipe";
++
++				assigned-clocks = <&gcc GCC_PCIE_0_PHY_RCHNG_CLK>;
++				assigned-clock-rates = <100000000>;
++
++				resets = <&gcc GCC_PCIE_0_PHY_BCR>;
++				reset-names = "phy";
++
++				power-domains = <&gcc GCC_PCIE_0_PHY_GDSC>;
++
++				vdda-phy-supply = <&pcie0_phy_rails_ml>;
++				vdda-pll-supply = <&pcie0_phy_rails_ml>;
++
++				#clock-cells = <0>;
++				clock-output-names = "pcie0_pipe_clk";
++
++				#phy-cells = <0>;
++
++				status = "okay";
++			};
++		};
++	};
++
++	/* root port: PERST#/WAKE on the port node (mainline convention) and
++	 * the pwrctrl child that powers the combo before the link trains */
++	fragment@235 {
++		target-path = "/soc/pcie@1c00000/pcie0_rp";
++		__overlay__ {
++			device_type = "pci";
++			bus-range = <0x01 0xff>;
++			#address-cells = <3>;
++			#size-cells = <2>;
++			ranges;
++
++			wake-gpios = <&piano_tlmm_ml 104 GPIO_ACTIVE_LOW>;
++			reset-gpios = <&piano_tlmm_ml 102 GPIO_ACTIVE_LOW>;
++
++			/* Round-3 fix: the 7.2.6 pcie-qcom driver takes the PHY
++			 * from the ROOT PORT node (devm_of_phy_get inside
++			 * qcom_pcie_parse_port); without it the probe failed
++			 * -ENODEV and fell back to the legacy host binding.
++			 */
++			phys = <&pcie0_phy_ml>;
++
++			/*
++			 * The stock cnss2 child also sits at devfn 0 and comes
++			 * first, so of_pci_find_child_device() gave the endpoint
++			 * its node instead of wifi@0: no PMU supplies, and the
++			 * Peach OL-CPR pwrseq lookup deferred forever.  An empty
++			 * reg takes it out of the devfn match.
++			 */
++			cnss_pci0 {
++				reg;
++			};
++
++			wifi@0 {
++				compatible = "pci17cb,110e";
++				reg = <0x10000 0x0 0x0 0x0 0x0>;
++
++				/*
++				 * The Peach OTP carries no MAC address (the WMI
++				 * ready event reports zeroes; Android pushes one
++				 * from persist).  Locally administered fallback,
++				 * next to the Bluetooth one.
++				 */
++				local-mac-address = [02 50 49 41 4e 50];
++
++				vddrfacmn-supply = <&vreg_pmu_rfa_cmn_ml>;
++				vddaon-supply = <&vreg_pmu_aon_0p59_ml>;
++				vddwlcx-supply = <&vreg_pmu_wlcx_0p8_ml>;
++				vddwlmx-supply = <&vreg_pmu_wlmx_0p85_ml>;
++				vddrfa0p8-supply = <&vreg_pmu_rfa_0p8_ml>;
++				vddrfa1p2-supply = <&vreg_pmu_rfa_1p2_ml>;
++				vddrfa1p8-supply = <&vreg_pmu_rfa_1p8_ml>;
++				vddpcie0p9-supply = <&vreg_pmu_pcie_0p9_ml>;
++				vddpcie1p8-supply = <&vreg_pmu_pcie_1p8_ml>;
++			};
++		};
++	};
++
++	/*
++	 * Round-2 fix (field log 2026-09-26): uart14 deferred forever on
++	 * "supplier f000000.pinctrl not ready" — the stock interrupts-extended
++	 * carries a TLMM gpio27 wake phandle into the never-bound vendor TLMM
++	 * node.  Drop it for the upstream single-GIC interrupt form.
++	 */
++	fragment@236 {
++		target-path = "/soc/qcom,qupv3_2_geni_se@8c0000/qcom,qup_uart@898000";
++		__overlay__ {
++			interrupts = <GIC_SPI 461 IRQ_TYPE_LEVEL_HIGH>;
++			interrupts-extended;
++		};
++	};
++
++	/*
++	 * Round 9: pcie_noc mainline binding — qcom_pcie_icc_init resolves
++	 * the pcie-mem/cpu-pcie paths through it (same treatment as the
++	 * other NoCs in the milestone-1 base; the vendor clocks and the
++	 * downstream pcie_crm voter phandle are replaced by the HLOS one).
++	 */
++	fragment@238 {
++		target = <&pcie_noc>;
++		__overlay__ {
++			compatible = "qcom,sm8750-pcie-anoc";
++			#interconnect-cells = <2>;
++			qcom,bcm-voter-names = "hlos";
++			qcom,bcm-voters = <&apps_bcm_voter_ml>;
++			clocks = <&gcc GCC_AGGRE_UFS_PHY_AXI_CLK>,
++				 <&gcc GCC_AGGRE_USB3_PRIM_AXI_CLK>;
++		};
++	};
++
++};
+diff --git a/initramfs/bt-scan/piano-bt-scan.c b/initramfs/bt-scan/piano-bt-scan.c
+new file mode 100644
+index 0000000..25c571b
+--- /dev/null
++++ b/initramfs/bt-scan/piano-bt-scan.c
+@@ -0,0 +1,285 @@
++// SPDX-License-Identifier: GPL-2.0-only
++/*
++ * piano-bt-scan — minimal Bluetooth proof for the piano debug image.
++ *
++ * Usage: piano-bt-scan [hci-index] [seconds]
++ *
++ * Brings the controller up, prints its BD address and version, runs an LE
++ * passive scan for a few seconds and prints every advertiser seen.  Talks
++ * raw HCI over an AF_BLUETOOTH socket, so no BlueZ userspace is needed.
++ *
++ * Controllers with LE Extended Advertising (the Brahma part is HCI 6.0) are
++ * driven by the kernel with the extended commands from init on, after which
++ * the legacy scan commands are rejected with Command Disallowed (0x0c).  The
++ * scan therefore follows the kernel: extended scan + extended advertising
++ * reports when the feature bit is set, legacy otherwise.  The event masks
++ * are left as the kernel programmed them.
++ * The socket ABI constants are copied here because the kernel does not
++ * export the Bluetooth headers as UAPI.
++ */
++#include <errno.h>
++#include <poll.h>
++#include <stdint.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <sys/ioctl.h>
++#include <sys/socket.h>
++#include <time.h>
++#include <unistd.h>
++
++#ifndef AF_BLUETOOTH
++#define AF_BLUETOOTH		31
++#endif
++#define BTPROTO_HCI		1
++#define SOL_HCI			0
++#define HCI_FILTER		2
++#define HCI_CHANNEL_RAW		0
++
++#define HCIDEVUP		_IOW('H', 201, int)
++
++#define HCI_COMMAND_PKT		0x01
++#define HCI_EVENT_PKT		0x04
++
++#define EVT_CMD_COMPLETE	0x0e
++#define EVT_CMD_STATUS		0x0f
++#define EVT_LE_META		0x3e
++#define EVT_LE_ADV_REPORT	0x02
++#define EVT_LE_EXT_ADV_REPORT	0x0d
++
++#define OP(ogf, ocf)		((uint16_t)(((ogf) << 10) | (ocf)))
++#define OP_RESET		OP(0x03, 0x0003)
++#define OP_READ_LOCAL_VERSION	OP(0x04, 0x0001)
++#define OP_READ_BD_ADDR		OP(0x04, 0x0009)
++#define OP_LE_SET_SCAN_PARAMS	OP(0x08, 0x000b)
++#define OP_LE_SET_SCAN_ENABLE	OP(0x08, 0x000c)
++#define OP_LE_READ_FEATURES	OP(0x08, 0x0003)
++#define OP_LE_SET_EXT_SCAN_PARAMS OP(0x08, 0x0041)
++#define OP_LE_SET_EXT_SCAN_ENABLE OP(0x08, 0x0042)
++
++/* LE feature bit 12: LE Extended Advertising */
++#define LE_FEAT_EXT_ADV_BYTE	1
++#define LE_FEAT_EXT_ADV_BIT	0x10
++
++struct sockaddr_hci {
++	sa_family_t hci_family;
++	unsigned short hci_dev;
++	unsigned short hci_channel;
++};
++
++struct hci_filter {
++	uint32_t type_mask;
++	uint32_t event_mask[2];
++	uint16_t opcode;
++};
++
++static int send_cmd(int fd, uint16_t op, const void *param, uint8_t plen)
++{
++	uint8_t buf[260];
++
++	buf[0] = HCI_COMMAND_PKT;
++	buf[1] = op & 0xff;
++	buf[2] = op >> 8;
++	buf[3] = plen;
++	if (plen)
++		memcpy(buf + 4, param, plen);
++	return write(fd, buf, 4 + plen) == 4 + plen ? 0 : -1;
++}
++
++/* wait for Command Complete of @op; copy its return parameters */
++static int wait_cc(int fd, uint16_t op, uint8_t *rp, int rp_len)
++{
++	uint8_t buf[260];
++	struct pollfd p = { .fd = fd, .events = POLLIN };
++
++	for (;;) {
++		int n;
++
++		if (poll(&p, 1, 3000) <= 0)
++			return -ETIMEDOUT;
++		n = read(fd, buf, sizeof(buf));
++		if (n < 3 || buf[0] != HCI_EVENT_PKT)
++			continue;
++		if (buf[1] == EVT_CMD_COMPLETE && n >= 7 &&
++		    (buf[4] | buf[5] << 8) == op) {
++			int len = n - 6;
++
++			if (len > rp_len)
++				len = rp_len;
++			memcpy(rp, buf + 6, len);
++			return len;
++		}
++		if (buf[1] == EVT_CMD_STATUS && n >= 7 &&
++		    (buf[5] | buf[6] << 8) == op && buf[3])
++			return -EIO;
++	}
++}
++
++static int cmd(int fd, uint16_t op, const void *param, uint8_t plen,
++	       uint8_t *rp, int rp_len)
++{
++	uint8_t tmp[64];
++	int ret;
++
++	if (!rp) {
++		rp = tmp;
++		rp_len = sizeof(tmp);
++	}
++	if (send_cmd(fd, op, param, plen))
++		return -errno;
++	ret = wait_cc(fd, op, rp, rp_len);
++	if (ret > 0 && rp[0]) {
++		fprintf(stderr, "opcode 0x%04x: HCI status 0x%02x\n", op, rp[0]);
++		return -EIO;
++	}
++	return ret;
++}
++
++/* one advertiser line: address, event type, RSSI and the name if present */
++static void print_adv(const uint8_t *addr, unsigned int type, int rssi,
++		      const uint8_t *ad, int len)
++{
++	char name[32] = "";
++	int i = 0;
++
++	while (i + 1 < len && ad[i]) {
++		int flen = ad[i];
++
++		if (i + 1 + flen > len)
++			break;
++		if (ad[i + 1] == 0x08 || ad[i + 1] == 0x09) {
++			int nlen = flen - 1 < (int)sizeof(name) - 1 ?
++				   flen - 1 : (int)sizeof(name) - 1;
++
++			memcpy(name, ad + i + 2, nlen);
++			name[nlen] = '\0';
++		}
++		i += 1 + flen;
++	}
++
++	printf("adv %02X:%02X:%02X:%02X:%02X:%02X type 0x%02x rssi %d%s%s\n",
++	       addr[5], addr[4], addr[3], addr[2], addr[1], addr[0], type,
++	       rssi, name[0] ? " name " : "", name);
++}
++
++int main(int argc, char **argv)
++{
++	int dev = argc > 1 ? atoi(argv[1]) : 0;
++	int secs = argc > 2 ? atoi(argv[2]) : 10;
++	struct sockaddr_hci a = { AF_BLUETOOTH, 0, HCI_CHANNEL_RAW };
++	struct hci_filter f;
++	uint8_t rp[64], buf[260];
++	struct pollfd p;
++	time_t end;
++	int fd, ctl, seen = 0, ext = 0;
++
++	ctl = socket(AF_BLUETOOTH, SOCK_RAW | SOCK_CLOEXEC, BTPROTO_HCI);
++	if (ctl < 0) {
++		perror("socket");
++		return 1;
++	}
++	if (ioctl(ctl, HCIDEVUP, dev) && errno != EALREADY) {
++		perror("HCIDEVUP");
++		return 1;
++	}
++
++	fd = socket(AF_BLUETOOTH, SOCK_RAW | SOCK_CLOEXEC, BTPROTO_HCI);
++	a.hci_dev = dev;
++	if (fd < 0 || bind(fd, (struct sockaddr *)&a, sizeof(a))) {
++		perror("bind");
++		return 1;
++	}
++	memset(&f, 0, sizeof(f));
++	f.type_mask = 1 << HCI_EVENT_PKT;
++	f.event_mask[0] = 0xffffffff;
++	f.event_mask[1] = 0xffffffff;
++	if (setsockopt(fd, SOL_HCI, HCI_FILTER, &f, sizeof(f))) {
++		perror("HCI_FILTER");
++		return 1;
++	}
++
++	if (cmd(fd, OP_READ_BD_ADDR, NULL, 0, rp, sizeof(rp)) >= 7)
++		printf("hci%d BD_ADDR %02X:%02X:%02X:%02X:%02X:%02X\n", dev,
++		       rp[6], rp[5], rp[4], rp[3], rp[2], rp[1]);
++	if (cmd(fd, OP_READ_LOCAL_VERSION, NULL, 0, rp, sizeof(rp)) >= 9)
++		printf("hci%d HCI version %u rev 0x%04x LMP %u manufacturer %u subver 0x%04x\n",
++		       dev, rp[1], rp[2] | rp[3] << 8, rp[4], rp[5] | rp[6] << 8,
++		       rp[7] | rp[8] << 8);
++
++	if (cmd(fd, OP_LE_READ_FEATURES, NULL, 0, rp, sizeof(rp)) >= 9)
++		ext = !!(rp[1 + LE_FEAT_EXT_ADV_BYTE] & LE_FEAT_EXT_ADV_BIT);
++	printf("hci%d LE scan mode: %s\n", dev, ext ? "extended" : "legacy");
++
++	{
++		/* passive, 10 ms interval/window, public, accept all */
++		uint8_t sp[7] = { 0x00, 0x10, 0x00, 0x10, 0x00, 0x00, 0x00 };
++		/* same, on the LE 1M PHY only */
++		uint8_t xsp[8] = { 0x00, 0x00, 0x01, 0x00, 0x10, 0x00, 0x10, 0x00 };
++		uint8_t on[2] = { 0x01, 0x00 }, off[2] = { 0x00, 0x00 };
++		/* enable, no duplicate filter, no duration, no period */
++		uint8_t xon[6] = { 0x01, 0x00, 0, 0, 0, 0 };
++		uint8_t xoff[6] = { 0x00, 0x00, 0, 0, 0, 0 };
++		int started;
++
++		if (ext) {
++			cmd(fd, OP_LE_SET_EXT_SCAN_ENABLE, xoff, sizeof(xoff), NULL, 0);
++			started = cmd(fd, OP_LE_SET_EXT_SCAN_PARAMS, xsp, sizeof(xsp), NULL, 0) >= 0 &&
++				  cmd(fd, OP_LE_SET_EXT_SCAN_ENABLE, xon, sizeof(xon), NULL, 0) >= 0;
++		} else {
++			cmd(fd, OP_LE_SET_SCAN_ENABLE, off, sizeof(off), NULL, 0);
++			started = cmd(fd, OP_LE_SET_SCAN_PARAMS, sp, sizeof(sp), NULL, 0) >= 0 &&
++				  cmd(fd, OP_LE_SET_SCAN_ENABLE, on, sizeof(on), NULL, 0) >= 0;
++		}
++		if (!started) {
++			fprintf(stderr, "LE scan could not be started\n");
++			return 1;
++		}
++		printf("LE scan for %d s...\n", secs);
++
++		p.fd = fd;
++		p.events = POLLIN;
++		end = time(NULL) + secs;
++		while (time(NULL) < end) {
++			int n, i, num, off_i;
++
++			if (poll(&p, 1, 500) <= 0)
++				continue;
++			n = read(fd, buf, sizeof(buf));
++			if (n < 5 || buf[0] != HCI_EVENT_PKT || buf[1] != EVT_LE_META)
++				continue;
++			num = buf[4];
++			off_i = 5;
++			if (buf[3] == EVT_LE_ADV_REPORT) {
++				for (i = 0; i < num && off_i + 10 <= n; i++) {
++					uint8_t *r = buf + off_i;
++					int dlen = r[8];
++
++					if (off_i + 10 + dlen > n)
++						break;
++					print_adv(r + 2, r[0], (int8_t)r[9 + dlen],
++						  r + 9, dlen);
++					seen++;
++					off_i += 10 + dlen;
++				}
++			} else if (buf[3] == EVT_LE_EXT_ADV_REPORT) {
++				for (i = 0; i < num && off_i + 24 <= n; i++) {
++					uint8_t *r = buf + off_i;
++					int dlen = r[23];
++
++					if (off_i + 24 + dlen > n)
++						break;
++					print_adv(r + 3, r[0] | r[1] << 8,
++						  (int8_t)r[13], r + 24, dlen);
++					seen++;
++					off_i += 24 + dlen;
++				}
++			}
++		}
++		if (ext)
++			cmd(fd, OP_LE_SET_EXT_SCAN_ENABLE, xoff, sizeof(xoff), NULL, 0);
++		else
++			cmd(fd, OP_LE_SET_SCAN_ENABLE, off, sizeof(off), NULL, 0);
++	}
++	printf("advertising reports: %d\n", seen);
++	return seen ? 0 : 2;
++}
+diff --git a/initramfs/init b/initramfs/init
+index 09020e6..a47f544 100755
+--- a/initramfs/init
++++ b/initramfs/init
+@@ -40,11 +40,16 @@ if mount -t pstore pstore /sys/fs/pstore 2>/dev/null; then
+   fi
+ fi
+ 
+-# --- apps SMMU: let QUP1 GPI DMA through ---------------------------------------
+-# ABL leaves the apps SMMU enabled with unmatched streams faulting; the touch
+-# SPI DMA (streams 0xb6/0xa3) would reset the SoC on its first transfer.
+-# Match them now, before anything can load the SPI stack.
+-piano-qup-smmu > /run/qup-smmu.log 2>&1 || say "WARN piano-qup-smmu failed (see /run/qup-smmu.log)"
++# --- apps SMMU: let the QUP1, QUP2 and PCIe DMA through -----------------------
++# ABL leaves the apps SMMU enabled with unmatched streams faulting (USFCFG=1).
++# Matched here, routed like the USB pass-through context:
++#   0xb6 0xa3  QUP1 GPI / SE   (touch SPI DMA)
++#   0x436 0x423 QUP2 GPI / SE  (uart14 SE DMA mode, BT HCI traffic)
++#   0x1400/0x7f PCIe0          (peach WLAN: stock smmu-sid-base 0x1400; the
++#                               iommu-map is dropped, so the BDF-to-SID
++#                               table is unprogrammed — cover the range)
++piano-qup-smmu 0xb6 0xa3 0x1400/0x7f 0x436 0x423 > /run/qup-smmu.log 2>&1 \
++  || say "WARN piano-qup-smmu failed (see /run/qup-smmu.log)"
+ 
+ # --- framebuffer beacon (bounded) -------------------------------------------
+ # Alternate white/black fills of the whole splash framebuffer so userspace
+@@ -182,6 +187,139 @@ busybox httpd -p 8080 -h /run && say "httpd serving /run on :8080" || say "WARN
+ 
+ say "debug environment up: NCM 10.42.0.2, ssh root@10.42.0.2"
+ 
++# --- WLAN/BT staged bring-up (peach combo), background -----------------------
++# One subsystem at a time, a kmsg marker before each step (pstore keeps the
++# console of a boot that dies) and everything collected under /run (served
++# on http :8080):
++#   /run/wlanbt-stages.log   step-by-step evidence
++#   /run/wlanbt-dmesg-*.log  full dmesg after each phase
++# Bluetooth goes first and on its own: phy-qcom-qmp-pcie is not loaded until
++# the WLAN phase, so pcie0 (built-in, its root port references that PHY)
++# stays unprobed while TLMM, the PMU and hci_qca come up.
++# `touch /run/wlan-hold` before the WLAN phase starts parks the ladder there
++# until the file is removed (the BT evidence can be fetched first).
++(
++  LOG=/run/wlanbt-stages.log
++  : > "$LOG"
++  stage() {
++    echo "piano-wlanbt: STAGE $1 ($2)" > /dev/kmsg
++    echo "=== STAGE $1 ($2) ===" >> "$LOG"
++  }
++  snap() { dmesg > "/run/wlanbt-dmesg-$1.log" 2>&1; }
++  # BT liveness: one Read BD_ADDR round trip (a dead controller shows up as
++  # a missing BD_ADDR line and a "command tx timeout" in dmesg), plus the
++  # hci_qca in-band-sleep counters
++  bt_probe() {
++    echo "--- BT probe ($1, uptime $(cut -d' ' -f1 /proc/uptime)):" >> "$LOG"
++    piano-bt-scan 0 0 2>&1 | grep 'BD_ADDR' >> "$LOG" \
++      || echo "no BD_ADDR: controller not answering" >> "$LOG"
++    for f in ibs_sent_sleeps ibs_sent_wakes ibs_recv_wake_acks ibs_recv_sleeps \
++             ibs_recv_wakes tx_ibs_state rx_ibs_state; do
++      printf '%s=%s ' "$f" "$(cat /sys/kernel/debug/bluetooth/hci0/ibs/$f 2>/dev/null)"
++    done >> "$LOG"
++    echo >> "$LOG"
++  }
++  grep -q ' /sys/kernel/debug ' /proc/mounts || mount -t debugfs none /sys/kernel/debug
++  sleep 8
++
++  stage 1 "BT: shared-gpio proxy, WCN PMU, TLMM, hci_uart"
++  modprobe gpio_shared_proxy >> "$LOG" 2>&1
++  modprobe pwrseq_qcom_wcn >> "$LOG" 2>&1
++  modprobe pinctrl_sm8750 >> "$LOG" 2>&1
++  sleep 3
++  ls -l /sys/bus/platform/devices/wcn7850-pmu/driver >> "$LOG" 2>&1
++  ls -l /sys/bus/platform/devices/898000.serial/driver >> "$LOG" 2>&1
++  # One setup attempt, no power-cycle retries (each retry costs ~30 s of
++  # HCI timeouts).  Brahma v2 downloads at 115200 with paced segments
++  # (~25 s for the rampatch), as the stock HAL does.
++  echo "--- AOSS QMP (PDC votes for the WCN PMU):" >> "$LOG"
++  ls -l /sys/bus/platform/devices/c300000.power-controller/driver >> "$LOG" 2>&1
++  bt_ok=no
++  # piano_peri=106: PERI to 8 Mbaud, arbitrate, patch the Brahma PERI subsystem
++  # (brhperifw20.tlv + brhperinv20.bin, PERI reset, re-activate BT) before
++  # the BT rampatch, then wake BT and re-read its version (unpatched PERI
++  # ROM crashes about a minute after setup)
++  modprobe hci_uart piano_retries=0 piano_peri=106 >> "$LOG" 2>&1
++  # the uart14 probe (and with it hci0) only lands ~10 s later
++  n=0
++  while ! dmesg | grep -q 'hci0: setting up' && [ $n -lt 30 ]; do sleep 1; n=$((n + 1)); done
++  n=0
++  while [ $n -lt 75 ]; do
++    if dmesg | grep -q 'setup on UART is completed'; then bt_ok=yes; break; fi
++    dmesg | grep -qE 'Failed to request file|setup failed|Retry BT power ON' && break
++    sleep 1; n=$((n + 1))
++  done
++  dmesg | grep -iE 'bluetooth|hci|qca|piano-dbg: baud|serdev|898000' >> "$LOG" 2>&1
++  echo "--- BT result: ${bt_ok} ---" >> "$LOG"
++  if [ "$bt_ok" = yes ]; then
++    echo "--- piano-bt-scan (hci0 up + 10 s LE scan):" >> "$LOG"
++    piano-bt-scan 0 10 >> "$LOG" 2>&1
++    echo "piano-bt-scan exit $?" >> "$LOG"
++    # does the controller survive idling (RF_CLK1 vote, in-band sleep)?
++    # probed before WLAN powers the other half of the combo
++    sleep 20; bt_probe "idle 20 s"
++    sleep 25; bt_probe "idle 45 s"
++    sleep 45; bt_probe "idle 90 s"
++    dmesg | grep -E 'hci0: (command tx timeout|Injecting|setup on UART)' >> "$LOG" 2>&1
++  fi
++  ls /sys/class/bluetooth/ >> "$LOG" 2>&1
++  snap bt
++  echo "piano-wlanbt: BT phase done (setup completed: $bt_ok)" > /dev/kmsg
++
++  echo "--- WLAN phase in 10 s (touch /run/wlan-hold to park it) ---" >> "$LOG"
++  sleep 10
++  while [ -e /run/wlan-hold ]; do sleep 2; done
++
++  stage 2 "WLAN: pci-pwrctrl-pwrseq, then the PCIe PHY (starts the pcie0 host probe)"
++  piano-qup-smmu --check 0x1400/0x7f >> "$LOG" 2>&1
++  modprobe pci_pwrctrl_pwrseq >> "$LOG" 2>&1
++  sleep 1
++  # PCIe0 reference clock: TCSR_PCIE_0_CLKREF_EN = bit 0 of 0x0f204008
++  # (tcsrcc-sm8750/tcsrcc-sun offset 0x0).  The overlay's tcsrcc sits on
++  # the wrong block (0x1fc0000), so the PHY gets a dummy clock and the
++  # real enable is set here.
++  echo "--- TCSR_PCIE_0_CLKREF_EN before/after:" >> "$LOG"
++  v=$(devmem 0x0f204008 32)
++  echo "$v" >> "$LOG"
++  devmem 0x0f204008 32 $((v | 1))
++  devmem 0x0f204008 32 >> "$LOG" 2>&1
++  echo "piano-wlanbt: pcie0 clkref $v -> $(devmem 0x0f204008 32)" > /dev/kmsg
++  # piano_skip_bcr: R16 reset on the core BCR assert, R18 on the next
++  # (PHY) BCR assert; pcie-qcom already skips the core one on sm8750
++  modprobe phy_qcom_qmp_pcie piano_skip_bcr=1 >> "$LOG" 2>&1
++  sleep 8
++  dmesg | grep -iE 'qcom-pcie|1c00000|pci|phy-qcom|pwrctrl|pwrseq' >> "$LOG" 2>&1
++  for d in /sys/bus/pci/devices/*; do
++    [ -r "$d/vendor" ] && echo "pci $(basename "$d"): $(cat "$d/vendor"):$(cat "$d/device")" >> "$LOG"
++  done
++  snap pcie
++
++  stage 3 "WLAN: qrtr + qrtr-mhi (QMI transport), ath12k (firmware + wiphy)"
++  # ath12k talks QMI over the MHI IPCR channel; nothing autoloads the
++  # socket family or the MHI client driver in this initramfs.
++  modprobe qrtr >> "$LOG" 2>&1
++  modprobe qrtr_mhi >> "$LOG" 2>&1
++  modprobe ath12k_wifi7 >> "$LOG" 2>&1
++  n=0
++  while [ -z "$(ls /sys/class/ieee80211/ 2>/dev/null)" ] && [ $n -lt 30 ]; do sleep 1; n=$((n + 1)); done
++  sleep 3
++  ls /sys/class/ieee80211/ >> "$LOG" 2>&1
++  iw dev >> "$LOG" 2>&1
++  # scan proof: bring the first wireless netdev up and list what it hears
++  wdev=$(ls /sys/class/net | while read -r d; do [ -d /sys/class/net/$d/wireless ] && echo "$d"; done | head -1)
++  if [ -n "$wdev" ]; then
++    ip link set "$wdev" up >> "$LOG" 2>&1
++    sleep 2
++    echo "--- scan on $wdev:" >> "$LOG"
++    iw dev "$wdev" scan 2>&1 | grep -E '^BSS|SSID:|signal:|freq:' | head -60 >> "$LOG"
++  fi
++  dmesg | grep -iE 'ath12k|mhi|wlan|ieee80211|qrtr' >> "$LOG" 2>&1
++  [ "$bt_ok" = yes ] && bt_probe "after the WLAN phase"
++  snap wlan
++  echo "piano-wlanbt: stages complete (see /run/wlanbt-stages.log)" > /dev/kmsg
++) &
++
++
+ # Keep the display-safe image passive after NCM setup.  ADSP modules and
+ # firmware remain staged for offline development, but no remoteproc, QRTR, or
+ # RPMh client is loaded during boot.  This preserves the milestone-1 display
+diff --git a/initramfs/tests/piano-bt-test b/initramfs/tests/piano-bt-test
+index 471e9a5..aa64e7c 100755
+--- a/initramfs/tests/piano-bt-test
++++ b/initramfs/tests/piano-bt-test
+@@ -54,7 +54,11 @@ if [ -e /sys/class/bluetooth/hci0 ]; then
+             *) [ -r "$f" ] && [ ! -d "$f" ] && echo "    $(basename "$f") = $(cat "$f" 2>/dev/null)" ;;
+         esac
+     done
+-    echo "  => controller alive: HCI reset + QCA firmware download succeeded"
++    if dmesg 2>/dev/null | grep 'Bluetooth: hci0:' | tail -1 | grep -qiE 'fail|retry|timeout|error'; then
++        echo "  => hci0 registered, but the QCA setup failed (see dmesg below)"
++    else
++        echo "  => controller alive: QCA firmware download completed"
++    fi
+ else
+     echo "  no hci0 — controller did not come up"
+ fi
+diff --git a/initramfs/tests/piano-qup-smmu b/initramfs/tests/piano-qup-smmu
+index 6d321be..f0069b7 100755
+--- a/initramfs/tests/piano-qup-smmu
++++ b/initramfs/tests/piano-qup-smmu
+@@ -1,7 +1,7 @@
+ #!/bin/sh
+ # piano-qup-smmu — let the QUP1 GPI DMA through the apps SMMU.
+ #
+-# Usage: piano-qup-smmu [--check] [STREAM_ID...]   (default: 0xb6 0xa3)
++# Usage: piano-qup-smmu [--check] [STREAM_ID[/MASK]...]   (default: 0xb6 0xa3)
+ #
+ # The kernel has no driver for the stock apps SMMU (qcom,qsmmu-v500 at
+ # 0x15000000), so the SMMU stays as the bootloader left it: enabled, with
+@@ -14,7 +14,9 @@
+ # This adds a stream match for each ID, routed exactly like the USB stream,
+ # in the first free stream-match slot. IDs that already match are left
+ # alone, so running it twice is harmless. Only the SMR/S2CR tables of the
+-# global register space are touched. --check only reports.
++# global register space are touched. --check only reports. An optional
++# /MASK (SMR mask bits) covers a whole stream range with one slot, e.g.
++# 0x1400/0x7f for every PCIe0 requester whatever the BDF-to-SID hash.
+ 
+ B=$((0x15000000))
+ USB_SID=$((0x40))
+@@ -36,15 +38,18 @@ if [ "$nsmr" -le 0 ] || [ "$nsmr" -gt 128 ]; then
+ fi
+ printf 'sCR0=0x%08x USFCFG=%d stream-match groups=%d\n' "$scr0" $(((scr0 >> 10) & 1)) "$nsmr"
+ 
+-# smr_match SID -> index of a valid SMR covering SID, or nothing
++# smr_match SID [MASK] -> index of a valid SMR covering SID (and every
++# stream the MASK adds), or nothing
+ smr_match() {
++    want=${2:-0}
+     i=0
+     while [ $i -lt "$nsmr" ]; do
+         smr=$(rd $((0x800 + 4 * i)))
+         if [ $((smr >> 31 & 1)) -eq 1 ]; then
+             id=$((smr & 0xffff))
+             mask=$(((smr >> 16) & 0x7fff))
+-            if [ $(( ($1 ^ id) & ~mask & 0xffff )) -eq 0 ]; then
++            if [ $(( ($1 ^ id) & ~mask & 0xffff )) -eq 0 ] &&
++               [ $(( want & ~mask & 0x7fff )) -eq 0 ]; then
+                 echo $i
+                 return 0
+             fi
+@@ -62,13 +67,28 @@ sctlr=$(rd $((0x80000 + 0x1000 * cb)))
+ [ $((sctlr & 1)) -eq 0 ] || die "USB context bank $cb translates (SCTLR.M=1); not a pass-through"
+ printf 'USB stream 0x40: slot %d, S2CR=0x%08x, context bank %d (stage 1 off)\n' "$usb_idx" "$s2cr" "$cb"
+ 
+-for sid in "$@"; do
+-    sid=$((sid))
+-    if idx=$(smr_match "$sid"); then
+-        printf 'stream 0x%x: already matched in slot %d\n' "$sid" "$idx"
++for arg in "$@"; do
++    case "$arg" in
++        */*) sid=$((${arg%/*})); smask=$((${arg#*/})) ;;
++        *)   sid=$((arg)); smask=0 ;;
++    esac
++    [ $((smask & ~0x7fff)) -eq 0 ] || die "mask $arg out of range"
++    sid=$((sid & ~smask))
++    if idx=$(smr_match "$sid" "$smask"); then
++        printf 'stream 0x%x/0x%x: already matched in slot %d\n' "$sid" "$smask" "$idx"
+         continue
+     fi
+-    [ "$CHECK" = 1 ] && { printf 'stream 0x%x: NOT matched (would fault)\n' "$sid"; continue; }
++    [ "$CHECK" = 1 ] && { printf 'stream 0x%x/0x%x: NOT matched (would fault)\n' "$sid" "$smask"; continue; }
++    # a partial overlap with an existing match is a stream-match conflict
++    i=0
++    while [ $i -lt "$nsmr" ]; do
++        smr=$(rd $((0x800 + 4 * i)))
++        if [ $((smr >> 31 & 1)) -eq 1 ] &&
++           [ $(( (sid ^ (smr & 0xffff)) & ~(smask | ((smr >> 16) & 0x7fff)) & 0xffff )) -eq 0 ]; then
++            die "0x$(printf %x "$sid")/0x$(printf %x "$smask") overlaps slot $i (SMR=0x$(printf %x "$smr"))"
++        fi
++        i=$((i + 1))
++    done
+     free=0
+     while [ $free -lt "$nsmr" ] && [ $(($(rd $((0x800 + 4 * free))) >> 31 & 1)) -eq 1 ]; do
+         free=$((free + 1))
+@@ -76,8 +96,8 @@ for sid in "$@"; do
+     [ $free -lt "$nsmr" ] || die "no free stream-match slot"
+     # route first, then make the match valid
+     wr $((0xc00 + 4 * free)) "$s2cr"
+-    wr $((0x800 + 4 * free)) $((0x80000000 | sid))
+-    got=$(smr_match "$sid") || die "stream 0x$(printf %x "$sid") still unmatched after the write"
+-    printf 'stream 0x%x: added in slot %d -> context bank %d\n' "$sid" "$got" "$cb"
++    wr $((0x800 + 4 * free)) $((0x80000000 | (smask << 16) | sid))
++    got=$(smr_match "$sid" "$smask") || die "stream 0x$(printf %x "$sid") still unmatched after the write"
++    printf 'stream 0x%x/0x%x: added in slot %d -> context bank %d\n' "$sid" "$smask" "$got" "$cb"
+ done
+ printf 'sGFSR=0x%08x\n' "$(rd 0x48)"
+diff --git a/initramfs/tests/piano-tests b/initramfs/tests/piano-tests
+index 6e50dbc..7982c96 100755
+--- a/initramfs/tests/piano-tests
++++ b/initramfs/tests/piano-tests
+@@ -62,10 +62,15 @@ probe_all() {
+     fi
+ 
+     # bluetooth
+-    if [ -e /sys/class/bluetooth/hci0 ]; then
+-        S_BT=1; E_BT="hci0 $(cat /sys/class/bluetooth/hci0/address 2>/dev/null)"
+-    else
++    # hci0 is registered before the QCA setup runs, so its presence alone
++    # proves nothing: judge by the last hci0 kernel message
++    bt_last=$(dmesg 2>/dev/null | grep 'Bluetooth: hci0:' | tail -1)
++    if [ ! -e /sys/class/bluetooth/hci0 ]; then
+         S_BT=0; E_BT="no hci0"
++    elif echo "$bt_last" | grep -qiE 'fail|retry|timeout|error'; then
++        S_BT=0; E_BT="hci0 setup failed"
++    else
++        S_BT=1; E_BT="hci0 set up"
+     fi
+ 
+     # wlan
+diff --git a/scripts/build-initramfs.sh b/scripts/build-initramfs.sh
+index 49f37b9..612f099 100755
+--- a/scripts/build-initramfs.sh
++++ b/scripts/build-initramfs.sh
+@@ -29,6 +29,8 @@
+ #   --touch-view FILE       installs the static THP frame viewer
+ #                           (scripts/build-touch-view.sh) as
+ #                           /usr/bin/piano-touch-view
++#   --bt-scan FILE          installs the static raw-HCI LE scanner as
++#                           /usr/bin/piano-bt-scan
+ #
+ # Any executable under initramfs/tests/ is installed into /usr/bin
+ # (piano-tests, piano-touch-test, piano-display-test, piano-collect).
+@@ -54,6 +56,7 @@ DROPBEAR_TREE=""
+ IW_TREE=""
+ PD_LOCATOR=""
+ TOUCH_VIEW=""
++BT_SCAN=""
+ APLAY_TREE=""
+ AUTHORIZED_KEYS=""
+ GENERATE_KEY_OUT=""
+@@ -72,6 +75,7 @@ while [ $# -gt 0 ]; do
+         --iw-tree)             IW_TREE=${2-}; shift 2 ;;
+         --pd-locator)          PD_LOCATOR=${2-}; shift 2 ;;
+         --touch-view)          TOUCH_VIEW=${2-}; shift 2 ;;
++        --bt-scan)             BT_SCAN=${2-}; shift 2 ;;
+         --aplay-tree)          APLAY_TREE=${2-}; shift 2 ;;
+         --output)              OUTPUT=${2-}; shift 2 ;;
+         --authorized-keys)     AUTHORIZED_KEYS=${2-}; shift 2 ;;
+@@ -222,6 +226,13 @@ if [ -n "$TOUCH_VIEW" ]; then
+     echo "build-initramfs: installed piano-touch-view from $TOUCH_VIEW"
+ fi
+ 
++# --- piano-bt-scan (raw-HCI LE scanner, Bluetooth proof) ----------------------
++if [ -n "$BT_SCAN" ]; then
++    file "$BT_SCAN" | grep -q 'ARM aarch64.*statically linked' \
++        || die "bt-scan is not a static arm64 ELF: $BT_SCAN"
++    install -m 0755 "$BT_SCAN" "$STAGING/usr/bin/piano-bt-scan"
++fi
++
+ # --- iw (WLAN nl80211 client) ------------------------------------------------
+ if [ -n "$IW_TREE" ]; then
+     [ -x "$IW_TREE/usr/sbin/iw" ] || die "no iw binary at $IW_TREE/usr/sbin/iw"
+@@ -277,7 +288,10 @@ if [ "${#MODULES[@]}" -gt 0 ]; then
+     command -v "$STRIP" >/dev/null 2>&1 || STRIP="strip"
+     for m in "${MODULES[@]}"; do
+         [ -n "$m" ] || continue
+-        rel=${m##*out/}
++        # normalise to the standard kernel/<subdir>/<name>.ko layout no
++        # matter where the .ko came from (kernel build dir or a
++        # modules_install closure root)
++        rel="kernel/${m##*/kernel/}"
+         d="$MODDIR/$(dirname "$rel")"
+         mkdir -p "$d"
+         # Strip debug sections: the kernel builds modules unstripped and the
+diff --git a/scripts/build-touch-view.sh b/scripts/build-touch-view.sh
+index 0c37a57..c8b06ee 100755
+--- a/scripts/build-touch-view.sh
++++ b/scripts/build-touch-view.sh
+@@ -2,12 +2,15 @@
+ # build-touch-view.sh — cross-compile the static piano-touch-view helper.
+ #
+ # Usage: scripts/build-touch-view.sh --uapi DIR --output FILE [--sysroot DIR]
++#                                    [--source FILE]
+ #
+ #   --uapi DIR     kernel UAPI headers (make headers_install
+ #                  INSTALL_HDR_PATH=...; DIR/include/linux/fb.h must exist)
+ #   --sysroot DIR  aarch64 musl sysroot staged by fetch-arm64-tools.sh
+ #                  (default: out/arm64-tools/musl-sysroot)
+ #   --output FILE  static arm64 ELF to write
++#   --source FILE  C source to build (default: the touch viewer); also used
++#                  for the other single-file helpers (piano-bt-scan)
+ #
+ # Needs clang and ld.lld on the host; links musl libc.a plus the staged
+ # compiler-rt builtins, no host aarch64 runtime required.
+@@ -23,13 +26,15 @@ REPO_ROOT=$(cd "$(dirname "$0")/.." && pwd)
+ SYSROOT="$REPO_ROOT/out/arm64-tools/musl-sysroot"
+ UAPI=""
+ OUTPUT=""
++SRC="$REPO_ROOT/initramfs/touch-view/piano-touch-view.c"
+ 
+ while [ $# -gt 0 ]; do
+     case "$1" in
+         --uapi)    UAPI=${2-}; shift 2 ;;
+         --sysroot) SYSROOT=${2-}; shift 2 ;;
+         --output)  OUTPUT=${2-}; shift 2 ;;
+-        -h|--help) sed -n '2,14p' "$0"; exit 0 ;;
++        --source)  SRC=${2-}; shift 2 ;;
++        -h|--help) sed -n '2,17p' "$0"; exit 0 ;;
+         *) die "unknown option: $1" ;;
+     esac
+ done
+@@ -45,7 +50,7 @@ done
+ command -v clang >/dev/null 2>&1 || die "clang not found"
+ command -v ld.lld >/dev/null 2>&1 || die "ld.lld not found"
+ 
+-SRC="$REPO_ROOT/initramfs/touch-view/piano-touch-view.c"
++[ -f "$SRC" ] || die "no such source: $SRC"
+ OBJ=$(mktemp "${TMPDIR:-/tmp}/piano-touch-view.XXXXXX.o")
+ trap 'rm -f "$OBJ"' EXIT
+ 

@@ -1,0 +1,10 @@
+{
+  "linux-sm8750-piano": {
+    "url": "https://github.com/yzddmr6/linux-sm8750-piano.git",
+    "commit": "d86e3f7b2204a041ca0a67b64c67bde046d284c5"
+  },
+  "linux-firmware-gpu": {
+    "url": "https://gitlab.com/kernel-firmware/linux-firmware.git",
+    "commit": "a2dcb924f0897368b0b4f305cbf9808cdda90ce0"
+  }
+}
