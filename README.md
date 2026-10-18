@@ -1,4 +1,4 @@
-# oneplus_ace5_pro_sys
+# OnePlus Ace 5 Pro Sys
 
 OnePlus Ace 5 Pro 的 Ubuntu 26.10 ARM64 系统构建工程。
 
