@@ -17,6 +17,7 @@ drivers/phy/qualcomm/phy-qcom-m31-eusb2.ko
 drivers/phy/phy-snps-eusb2.ko
 drivers/ufs/host/ufs-qcom.ko
 drivers/i2c/busses/i2c-qcom-geni.ko
+drivers/usb/typec/mux/wcd939x-usbss.ko
 drivers/dma/qcom/gpi.ko
 drivers/spi/spi-geni-qcom.ko
 drivers/power/sequencing/pwrseq-qcom-wcn.ko
