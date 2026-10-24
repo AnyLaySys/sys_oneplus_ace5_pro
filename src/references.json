@@ -6,5 +6,10 @@
   "linux-firmware-gpu": {
     "url": "https://gitlab.com/kernel-firmware/linux-firmware.git",
     "commit": "a2dcb924f0897368b0b4f305cbf9808cdda90ce0"
+  },
+  "oneplus-display": {
+    "url": "https://github.com/OnePlusOSS/android_kernel_modules_and_devicetree_oneplus_sm8750.git",
+    "commit": "d50b305f7da9e14715a25120a4ac7b1a4b8b97c3",
+    "path": "vendor/qcom/opensource/display-devicetree/oplus/panel/dsi-panel-AA590-P-3-A0020-dsc-cmd.dtsi"
   }
 }

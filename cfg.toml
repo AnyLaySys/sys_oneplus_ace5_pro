@@ -8,9 +8,9 @@ archive = "https://ports.ubuntu.com/ubuntu-ports"
 
 [inputs]
 kernel = "../linux_oneplus_ace5_pro/out/kernel"
-uefi_image = "../Mu-Silicium/Mu-hummer.img"
-uefi_fd = "../Mu-Silicium/Build/hummerPkg/RELEASE_CLANGPDB/FV/SILICIUM_UEFI.fd"
-boot_shim = "../Mu-Silicium/BootShim/BootShim.bin"
+uefi_image = "../uefi_oneplus_ace5_pro/hummer.img"
+uefi_fd = "../uefi_oneplus_ace5_pro/Build/hummerPkg/RELEASE_CLANGPDB/FV/HUMMER_UEFI.fd"
+boot_shim = "../uefi_oneplus_ace5_pro/BootShim/BootShim.bin"
 
 [rootfs]
 uuid = "6cb758d4-a0d4-4f53-9286-2a9f92ee6390"

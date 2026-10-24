@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
+#include <sys/klog.h>
 #include <sys/mount.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
@@ -75,6 +76,31 @@ static int write_text(const char *path, const char *text)
 
 #include "root.h"
 
+#define KLOG_READ_ALL 3
+#define KLOG_SIZE_BUFFER 10
+
+static void save_probe_log(int status)
+{
+    int size = klogctl(KLOG_SIZE_BUFFER, NULL, 0);
+    if (size <= 0 || prepare_ufs_root())
+        return;
+    char *buffer = malloc((size_t)size);
+    if (!buffer)
+        return;
+    int length = klogctl(KLOG_READ_ALL, buffer, size);
+    int fd = open("/ubuntu/var/log/ace5pro-early-boot.log",
+                  O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
+    if (fd >= 0) {
+        dprintf(fd, "hardware-probe status=0x%x\n", status);
+        if (length > 0)
+            write_all(fd, buffer, (size_t)length);
+        fsync(fd);
+        close(fd);
+        sync();
+    }
+    free(buffer);
+}
+
 static void ubuntu_worker(void)
 {
     int null = open("/dev/null", O_WRONLY | O_CLOEXEC);
@@ -90,13 +116,15 @@ static void ubuntu_worker(void)
     }
     if (probe < 0)
         _exit(1);
-    int status;
+    int status = 0;
     pid_t waited;
     do {
         waited = waitpid(probe, &status, 0);
     } while (waited < 0 && errno == EINTR);
-    if (waited != probe || probe <= 0 || !WIFEXITED(status) || WEXITSTATUS(status))
+    if (waited != probe || probe <= 0 || !WIFEXITED(status) || WEXITSTATUS(status)) {
+        save_probe_log(status);
         _exit(1);
+    }
     if (prepare_ubuntu_root())
         _exit(1);
     if (chroot("/ubuntu") || chdir("/"))

@@ -10,7 +10,8 @@ OnePlus Ace 5 Pro 的 Ubuntu 26.10 ARM64 系统构建工程。
 * `src/mesa`：Mesa 固定版本、修改源码、ARM64 依赖清单与打包脚本。
 * `src/\*firmware`、`src/qcom-sm8750-audio`：现用固件与音频拓扑。
 * `src/wifi-wcn-reference`：Wi-Fi 固件及适配参考源码。
-* `build`：下载、第三方源码检出、编译缓存和产物。
+* `build`：Ubuntu rootfs 缓存与启动镜像构建目录。
+* `build/out`：编译产物与 Mesa 构建输出。
 
 ## 构建环境
 
@@ -51,11 +52,11 @@ python3 ./build.py -j $(nproc)
 python3 src/mesa/build.py
 ```
 
-软件包输出为 `build/mesa-sm8750.deb`。Mesa 构建使用固定的 ARM64 开发包与运行库，不依赖手机 SSH 或已有 rootfs。
+软件包输出为 `build/out/mesa/mesa-sm8750.deb`。Mesa 构建使用固定的 ARM64 开发包与运行库，不依赖手机 SSH 或已有 rootfs。
 
 ## 源码保存
 
 提交根目录构建文件和完整 `src`。`src` 中的现用固件、音频拓扑和修改源码必须一并保存。
 
-`build` 已被 Git 忽略。Mesa 修改应编辑 `src/mesa/overlay`；`build/src/mesa` 是可重新生成的源码检出。内核和 UEFI 修改分别保存在各自的仓库。
+`build` 已被 Git 忽略。Mesa 修改应编辑 `src/mesa/overlay`；可再生的上游源码检出位于 `build/src/mesa`，构建输出位于 `build/out/mesa`。内核和 UEFI 修改分别保存在各自的仓库。
 

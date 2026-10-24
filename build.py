@@ -241,6 +241,10 @@ def sync_rootfs_kernel_payload(root, spec):
     order = (source / 'modules.order').read_text().splitlines()
     (target / 'modules.order').write_text(''.join(line + '\n' for line in order if line.removeprefix('kernel/') in required))
     write(root, 'etc/ace5pro-kernel-release', release + '\n')
+    plymouth_theme = root / 'etc/alternatives/default.plymouth'
+    if plymouth_theme.is_symlink() or plymouth_theme.exists():
+        plymouth_theme.unlink()
+    plymouth_theme.symlink_to('/usr/share/plymouth/themes/spinner/spinner.plymouth')
     for name, content in ROOTFS_FILES.items():
         write(root, name, content)
     stage_wifi_firmware(root)
@@ -248,7 +252,7 @@ def sync_rootfs_kernel_payload(root, spec):
     stage_audio_topology(root)
     stage_bt_firmware(root)
     package = root / 'tmp/mesa-sm8750.deb'
-    shutil.copy2(BUILD / 'mesa-sm8750.deb', package)
+    shutil.copy2(BUILD / 'out/mesa/mesa-sm8750.deb', package)
     run('chroot', root, 'dpkg', '-i', '/tmp/mesa-sm8750.deb')
     package.unlink()
     run('depmod', '-b', root, release)

@@ -12,8 +12,9 @@ import urllib.request
 
 sys.dont_write_bytecode = True
 SOURCE = Path(__file__).resolve().parent
-BUILD = SOURCE.parents[1] / 'build'
-CHECKOUT = BUILD / 'src/mesa'
+ROOT = SOURCE.parents[1]
+BUILD = ROOT / 'build/out/mesa'
+CHECKOUT = ROOT / 'build/src/mesa'
 SYSROOT = BUILD / 'mesa-sysroot'
 OUTPUT = BUILD / 'mesa-a830'
 PACKAGE = BUILD / 'mesa-sm8750.deb'
@@ -45,7 +46,7 @@ def download(spec):
 
 
 def main():
-    BUILD.mkdir(exist_ok=True)
+    BUILD.mkdir(parents=True, exist_ok=True)
     inputs = hashlib.sha256()
     for path in sorted(SOURCE.rglob('*')):
         if path.is_file():
@@ -73,7 +74,13 @@ def main():
         run('dpkg-deb', '-x', path, SYSROOT)
     cross = BUILD / 'mesa-cross.ini'
     cross.write_text((SOURCE / 'cross.ini').read_text().replace('@SYSROOT@', str(SYSROOT)))
-    run('meson', 'setup', *(['--reconfigure'] if (OUTPUT / 'build.ninja').is_file() else []),
+    reconfigure = (OUTPUT / 'build.ninja').is_file()
+    command = OUTPUT / 'meson-private/cmd_line.txt'
+    if reconfigure and (not command.is_file() or str(cross) not in command.read_text() or
+                        str(CHECKOUT) not in command.read_text()):
+        shutil.rmtree(OUTPUT)
+        reconfigure = False
+    run('meson', 'setup', *(['--reconfigure'] if reconfigure else []),
         OUTPUT, CHECKOUT, '--cross-file', cross, '--prefix=/opt/mesa-a830', '--libdir=lib',
         '--buildtype=release', '-Dplatforms=x11,wayland', '-Dgallium-drivers=freedreno',
         '-Dvulkan-drivers=freedreno', '-Dfreedreno-kmds=msm', '-Dllvm=disabled',
