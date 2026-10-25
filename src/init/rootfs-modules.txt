@@ -1,3 +1,4 @@
 crypto/af_alg.ko
 drivers/remoteproc/qcom_q6v5_pas.ko
 drivers/soc/qcom/socinfo.ko
+drivers/leds/flash/leds-qcom-flash.ko
