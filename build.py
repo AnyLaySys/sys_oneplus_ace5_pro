@@ -23,6 +23,7 @@ ROOT = Path(__file__).resolve().parent
 BUILD = ROOT / 'build'
 SOURCE = ROOT / 'src'
 OUTPUT = BUILD / 'out'
+ROOTFS_CACHE = BUILD / 'ubuntu-20261011130817'
 sys.dont_write_bytecode = True
 
 ROOTFS_FILES = {
@@ -406,15 +407,13 @@ def prepare_rootfs(spec_path):
         raise SystemExit('Run through build.py')
     spec = json.loads(spec_path.read_text())
     root = Path(spec['root']).resolve()
-    if not root.is_relative_to(BUILD) or root.name != 'rootfs':
-        raise ValueError('Rootfs must be a staging directory inside build')
+    if not root.is_relative_to(BUILD) or not root.name.startswith('ubuntu-'):
+        raise ValueError('Rootfs must be a cache directory inside build')
     if spec['reuse']:
         if not root.is_dir():
             raise FileNotFoundError(root)
     else:
-        if root.exists():
-            shutil.rmtree(root)
-        root.mkdir(parents=True)
+        root.mkdir(parents=True, exist_ok=True)
         provision(root, spec)
     sync_rootfs_kernel_payload(root, spec)
     make_image(root, spec)
@@ -590,12 +589,10 @@ def digest(path):
 def save_json(path, data):
     Path(path).write_text(json.dumps(data, indent=2, ensure_ascii=False) + '\n')
 
-def latest_rootfs_cache():
-    caches = [path for path in BUILD.glob('ubuntu-*')
-              if path.is_dir() and (path / 'rootfs' / 'etc/os-release').is_file()]
-    if not caches:
-        raise FileNotFoundError('No Ubuntu rootfs cache found in ' + str(BUILD))
-    return max(caches, key=lambda path: path.name)
+def rootfs_cache():
+    if not (ROOTFS_CACHE / 'etc/os-release').is_file():
+        raise FileNotFoundError(ROOTFS_CACHE)
+    return ROOTFS_CACHE
 
 def main():
     parser = argparse.ArgumentParser(description='Build Ubuntu 26.10 arm64 for OnePlus Ace 5 Pro')
@@ -744,23 +741,21 @@ def main():
             (modules / 'ready').write_text(module_key)
         if args.rootfs:
             root_cache = args.rootfs.resolve()
-        elif args.no_rootfs:
-            root_cache = latest_rootfs_cache()
         else:
-            root_cache = build_dir / ('ubuntu-' + datetime.datetime.now().strftime('%Y%m%d%H%M%S'))
+            root_cache = rootfs_cache()
         if not root_cache.is_relative_to(build_dir):
             raise ValueError('Rootfs cache must be inside build')
         if args.no_rootfs:
-            if not (root_cache / 'rootfs').is_dir():
-                raise FileNotFoundError(root_cache / 'rootfs')
+            if not (root_cache / 'etc/os-release').is_file():
+                raise FileNotFoundError(root_cache)
             stage(f'Using rootfs cache {root_cache}; building boot only')
         else:
             run(sys.executable, SOURCE / 'mesa/build.py')
-            root_cache.mkdir(parents=True, exist_ok=reuse)
-            spec = {'config': config, 'base': str(base), 'root': str(root_cache / 'rootfs'),
+            root_cache.mkdir(parents=True, exist_ok=True)
+            spec = {'config': config, 'base': str(base), 'root': str(root_cache),
                     'modules': str(modules), 'release': release, 'packages': packages,
                     'package_manifest': str(output / 'packages.tsv'), 'image': str(output / 'rootfs.img'),
-                    'reuse': reuse,
+                    'reuse': reuse or (root_cache / 'var/lib/dpkg/status').is_file(),
                     'uid': os.getuid(), 'gid': os.getgid()}
             save_json(work / 'rootfs.json', spec)
             stage('Building Ubuntu Desktop in an isolated ARM64 chroot; this can take a while' if not reuse else
